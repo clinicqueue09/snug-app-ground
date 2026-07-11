@@ -14,8 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      clinics: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          status: string
+          trial_ends_at: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          status?: string
+          trial_ends_at?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          status?: string
+          trial_ends_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       doctors: {
         Row: {
+          clinic_id: string
           created_at: string
           id: string
           is_active: boolean
@@ -24,6 +52,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          clinic_id: string
           created_at?: string
           id?: string
           is_active?: boolean
@@ -32,101 +61,97 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          clinic_id?: string
           created_at?: string
           id?: string
           is_active?: boolean
           name?: string
           specialty?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      patients: {
-        Row: {
-          created_at: string
-          date_of_birth: string | null
-          email: string | null
-          id: string
-          name: string
-          phone: string | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          date_of_birth?: string | null
-          email?: string | null
-          id?: string
-          name: string
-          phone?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          date_of_birth?: string | null
-          email?: string | null
-          id?: string
-          name?: string
-          phone?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      queue_entries: {
-        Row: {
-          check_in_time: string
-          created_at: string
-          created_by: string | null
-          doctor_id: string | null
-          end_time: string | null
-          id: string
-          notes: string | null
-          patient_id: string
-          priority: string
-          start_time: string | null
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          check_in_time?: string
-          created_at?: string
-          created_by?: string | null
-          doctor_id?: string | null
-          end_time?: string | null
-          id?: string
-          notes?: string | null
-          patient_id: string
-          priority?: string
-          start_time?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          check_in_time?: string
-          created_at?: string
-          created_by?: string | null
-          doctor_id?: string | null
-          end_time?: string | null
-          id?: string
-          notes?: string | null
-          patient_id?: string
-          priority?: string
-          start_time?: string | null
-          status?: string
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "queue_entries_doctor_id_fkey"
-            columns: ["doctor_id"]
+            foreignKeyName: "doctors_clinic_id_fkey"
+            columns: ["clinic_id"]
             isOneToOne: false
-            referencedRelation: "doctors"
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      receptionists: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "receptionists_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tokens: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          doctor_id: string | null
+          id: string
+          patient_name: string
+          phone: string | null
+          status: string
+          token_number: number
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          doctor_id?: string | null
+          id?: string
+          patient_name: string
+          phone?: string | null
+          status?: string
+          token_number: number
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          doctor_id?: string | null
+          id?: string
+          patient_name?: string
+          phone?: string | null
+          status?: string
+          token_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tokens_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "queue_entries_patient_id_fkey"
-            columns: ["patient_id"]
+            foreignKeyName: "tokens_doctor_id_fkey"
+            columns: ["doctor_id"]
             isOneToOne: false
-            referencedRelation: "patients"
+            referencedRelation: "doctors"
             referencedColumns: ["id"]
           },
         ]
@@ -136,7 +161,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      current_clinic_id: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never
