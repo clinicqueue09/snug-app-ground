@@ -14,7 +14,123 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      doctors: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          specialty: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          specialty?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          specialty?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      patients: {
+        Row: {
+          created_at: string
+          date_of_birth: string | null
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          date_of_birth?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          date_of_birth?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      queue_entries: {
+        Row: {
+          check_in_time: string
+          created_at: string
+          created_by: string | null
+          doctor_id: string | null
+          end_time: string | null
+          id: string
+          notes: string | null
+          patient_id: string
+          priority: string
+          start_time: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          check_in_time?: string
+          created_at?: string
+          created_by?: string | null
+          doctor_id?: string | null
+          end_time?: string | null
+          id?: string
+          notes?: string | null
+          patient_id: string
+          priority?: string
+          start_time?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          check_in_time?: string
+          created_at?: string
+          created_by?: string | null
+          doctor_id?: string | null
+          end_time?: string | null
+          id?: string
+          notes?: string | null
+          patient_id?: string
+          priority?: string
+          start_time?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "queue_entries_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "doctors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "queue_entries_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
