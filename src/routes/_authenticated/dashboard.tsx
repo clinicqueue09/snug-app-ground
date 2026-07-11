@@ -8,53 +8,53 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { LogOut, Plus, Stethoscope, Clock, CheckCircle2, PlayCircle, XCircle } from "lucide-react";
+import { LogOut, Stethoscope, Clock, CheckCircle2, PlayCircle, XCircle, UserPlus, AlertTriangle, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
 });
 
-type Patient = { id: string; name: string; phone: string | null };
+type Clinic = { id: string; name: string; status: string; trial_ends_at: string };
 type Doctor = { id: string; name: string; specialty: string | null };
-type QueueEntry = {
+type Token = {
   id: string;
-  patient_id: string;
+  token_number: number;
+  patient_name: string;
+  phone: string | null;
   doctor_id: string | null;
-  status: "waiting" | "in-progress" | "completed" | "no-show";
-  priority: "normal" | "urgent";
-  notes: string | null;
-  check_in_time: string;
+  status: "waiting" | "in_consultation" | "completed" | "no_show";
+  created_at: string;
 };
 
-const statusMeta: Record<QueueEntry["status"], { label: string; className: string; icon: React.ElementType }> = {
-  waiting: { label: "Waiting", className: "bg-amber-500/15 text-amber-700 dark:text-amber-400", icon: Clock },
-  "in-progress": { label: "In progress", className: "bg-blue-500/15 text-blue-700 dark:text-blue-400", icon: PlayCircle },
-  completed: { label: "Completed", className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400", icon: CheckCircle2 },
-  "no-show": { label: "No-show", className: "bg-rose-500/15 text-rose-700 dark:text-rose-400", icon: XCircle },
+const statusMeta: Record<Token["status"], { label: string; className: string; icon: React.ElementType }> = {
+  waiting: { label: "Waiting", className: "bg-sky-100 text-sky-700 border-sky-200", icon: Clock },
+  in_consultation: { label: "In Consultation", className: "bg-blue-100 text-blue-700 border-blue-200", icon: PlayCircle },
+  completed: { label: "Completed", className: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
+  no_show: { label: "No Show", className: "bg-rose-100 text-rose-700 border-rose-200", icon: XCircle },
 };
 
 function Dashboard() {
   const navigate = useNavigate();
   const [email, setEmail] = useState<string | null>(null);
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const [clinic, setClinic] = useState<Clinic | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [entries, setEntries] = useState<QueueEntry[]>([]);
+  const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const patientMap = useMemo(() => new Map(patients.map((p) => [p.id, p])), [patients]);
   const doctorMap = useMemo(() => new Map(doctors.map((d) => [d.id, d])), [doctors]);
 
   const loadAll = async () => {
-    const [p, d, q] = await Promise.all([
-      supabase.from("patients").select("id,name,phone").order("name"),
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [c, d, t] = await Promise.all([
+      supabase.from("clinics").select("id,name,status,trial_ends_at").limit(1).maybeSingle(),
       supabase.from("doctors").select("id,name,specialty").eq("is_active", true).order("name"),
-      supabase.from("queue_entries").select("*").order("check_in_time", { ascending: true }),
+      supabase.from("tokens").select("*").gte("created_at", today.toISOString()).order("token_number", { ascending: true }),
     ]);
-    if (p.data) setPatients(p.data as Patient[]);
+    if (c.data) setClinic(c.data as Clinic);
     if (d.data) setDoctors(d.data as Doctor[]);
-    if (q.data) setEntries(q.data as QueueEntry[]);
+    if (t.data) setTokens(t.data as Token[]);
     setLoading(false);
   };
 
@@ -62,8 +62,8 @@ function Dashboard() {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
     loadAll();
     const channel = supabase
-      .channel("queue-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "queue_entries" }, loadAll)
+      .channel("tokens-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tokens" }, loadAll)
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
@@ -75,268 +75,219 @@ function Dashboard() {
     navigate({ to: "/auth", replace: true });
   };
 
-  const updateStatus = async (id: string, status: QueueEntry["status"]) => {
-    const patch: Partial<QueueEntry> & { start_time?: string; end_time?: string } = { status };
-    if (status === "in-progress") (patch as any).start_time = new Date().toISOString();
-    if (status === "completed" || status === "no-show") (patch as any).end_time = new Date().toISOString();
-    const { error } = await supabase.from("queue_entries").update(patch).eq("id", id);
+  const updateStatus = async (id: string, status: Token["status"]) => {
+    const { error } = await supabase.from("tokens").update({ status }).eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("Updated");
-    loadAll();
   };
 
-  const removeEntry = async (id: string) => {
-    const { error } = await supabase.from("queue_entries").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    loadAll();
-  };
-
-  const waiting = entries.filter((e) => e.status === "waiting");
-  const active = entries.filter((e) => e.status === "in-progress");
-  const done = entries.filter((e) => e.status === "completed" || e.status === "no-show");
+  const trialDaysLeft = clinic ? Math.ceil((new Date(clinic.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
+  const trialExpired = clinic ? new Date(clinic.trial_ends_at).getTime() < Date.now() && clinic.status !== "active" : false;
+  const showTrialBanner = clinic?.status === "trial" && !trialExpired;
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <header className="border-b bg-background">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-slate-50">
+      {/* Trial / Expiry banner */}
+      {trialExpired && (
+        <div className="bg-rose-600 text-white px-6 py-3 flex items-center justify-center gap-2 text-sm font-medium">
+          <AlertTriangle className="h-4 w-4" />
+          Your 14-day free trial has expired. Please upgrade to continue adding patients.
+        </div>
+      )}
+      {showTrialBanner && (
+        <div className="bg-sky-50 border-b border-sky-100 text-sky-900 px-6 py-2.5 flex items-center justify-center gap-2 text-sm">
+          <Sparkles className="h-4 w-4 text-sky-600" />
+          <span className="font-medium">{trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left</span>
+          <span className="text-sky-700">in your free trial</span>
+        </div>
+      )}
+
+      <header className="border-b border-slate-200 bg-white">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+            <div className="h-10 w-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shadow-sm">
               <Stethoscope className="h-5 w-5" />
             </div>
             <div>
-              <div className="font-semibold leading-tight">Clinic Queue</div>
-              <div className="text-xs text-muted-foreground">{email}</div>
+              <div className="font-semibold text-slate-900 leading-tight">{clinic?.name ?? "Clinic Queue"}</div>
+              <div className="text-xs text-slate-500">{email}</div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <ManageDoctorsDialog doctors={doctors} onChange={loadAll} />
-            <AddToQueueDialog patients={patients} doctors={doctors} onCreated={loadAll} />
-            <Button variant="ghost" size="icon" onClick={handleSignOut} aria-label="Sign out">
+            <ManageDoctorsDialog doctors={doctors} clinicId={clinic?.id} onChange={loadAll} />
+            <Button variant="ghost" size="icon" onClick={handleSignOut} aria-label="Sign out" className="text-slate-500 hover:text-slate-900">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard label="Waiting" value={waiting.length} tone="amber" />
-          <StatCard label="In progress" value={active.length} tone="blue" />
-          <StatCard label="Completed today" value={done.length} tone="emerald" />
-        </div>
+      <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Add Patient */}
+        <section className="lg:col-span-1">
+          <AddPatientCard
+            clinicId={clinic?.id}
+            doctors={doctors}
+            disabled={trialExpired}
+            onAdded={loadAll}
+          />
+        </section>
 
-        <Section title="Waiting" empty="No patients waiting.">
-          {loading ? null : waiting.map((e) => (
-            <QueueRow key={e.id} entry={e} patient={patientMap.get(e.patient_id)} doctor={e.doctor_id ? doctorMap.get(e.doctor_id) : undefined}
-              onStart={() => updateStatus(e.id, "in-progress")}
-              onNoShow={() => updateStatus(e.id, "no-show")}
-              onRemove={() => removeEntry(e.id)}
-            />
-          ))}
-        </Section>
+        {/* Queue */}
+        <section className="lg:col-span-2 space-y-4">
+          <div className="flex items-baseline justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Today's Queue</h2>
+              <p className="text-sm text-slate-500 mt-0.5">{tokens.length} {tokens.length === 1 ? "patient" : "patients"}</p>
+            </div>
+          </div>
 
-        <Section title="In progress" empty="No active consultations.">
-          {active.map((e) => (
-            <QueueRow key={e.id} entry={e} patient={patientMap.get(e.patient_id)} doctor={e.doctor_id ? doctorMap.get(e.doctor_id) : undefined}
-              onComplete={() => updateStatus(e.id, "completed")}
-              onRemove={() => removeEntry(e.id)}
-            />
-          ))}
-        </Section>
-
-        <Section title="Recent" empty="Nothing completed yet.">
-          {done.slice(0, 10).map((e) => (
-            <QueueRow key={e.id} entry={e} patient={patientMap.get(e.patient_id)} doctor={e.doctor_id ? doctorMap.get(e.doctor_id) : undefined}
-              onRemove={() => removeEntry(e.id)}
-            />
-          ))}
-        </Section>
+          <Card className="border-slate-200 shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 w-16">Token</th>
+                    <th className="px-4 py-3">Patient</th>
+                    <th className="px-4 py-3 hidden md:table-cell">Phone</th>
+                    <th className="px-4 py-3 hidden sm:table-cell">Doctor</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loading ? (
+                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">Loading…</td></tr>
+                  ) : tokens.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">No patients in the queue today.</td></tr>
+                  ) : tokens.map((t) => (
+                    <TokenRow key={t.id} token={t} doctor={t.doctor_id ? doctorMap.get(t.doctor_id) : undefined} onUpdate={updateStatus} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </section>
       </main>
     </div>
   );
 }
 
-function StatCard({ label, value, tone }: { label: string; value: number; tone: "amber" | "blue" | "emerald" }) {
-  const toneClass = {
-    amber: "text-amber-600 dark:text-amber-400",
-    blue: "text-blue-600 dark:text-blue-400",
-    emerald: "text-emerald-600 dark:text-emerald-400",
-  }[tone];
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="text-sm text-muted-foreground">{label}</div>
-        <div className={`text-3xl font-semibold mt-1 ${toneClass}`}>{value}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function Section({ title, empty, children }: { title: string; empty: string; children: React.ReactNode }) {
-  const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
-  return (
-    <section>
-      <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">{title}</h2>
-      <div className="space-y-2">
-        {hasChildren ? children : <div className="text-sm text-muted-foreground bg-background border rounded-lg px-4 py-6 text-center">{empty}</div>}
-      </div>
-    </section>
-  );
-}
-
-function QueueRow({
-  entry, patient, doctor, onStart, onComplete, onNoShow, onRemove,
-}: {
-  entry: QueueEntry;
-  patient?: Patient;
-  doctor?: Doctor;
-  onStart?: () => void;
-  onComplete?: () => void;
-  onNoShow?: () => void;
-  onRemove?: () => void;
-}) {
-  const meta = statusMeta[entry.status];
+function TokenRow({ token, doctor, onUpdate }: { token: Token; doctor?: Doctor; onUpdate: (id: string, s: Token["status"]) => void }) {
+  const meta = statusMeta[token.status];
   const Icon = meta.icon;
-  const checkIn = new Date(entry.check_in_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   return (
-    <div className="bg-background border rounded-lg px-4 py-3 flex flex-wrap items-center gap-3 justify-between">
-      <div className="flex items-center gap-3 min-w-0">
-        <Badge className={meta.className + " gap-1"} variant="secondary">
+    <tr className="hover:bg-slate-50/60 transition-colors">
+      <td className="px-4 py-3">
+        <div className="h-9 w-9 rounded-lg bg-sky-50 text-sky-700 font-semibold text-sm flex items-center justify-center">
+          {token.token_number}
+        </div>
+      </td>
+      <td className="px-4 py-3 font-medium text-slate-900">{token.patient_name}</td>
+      <td className="px-4 py-3 text-slate-600 hidden md:table-cell">{token.phone || "—"}</td>
+      <td className="px-4 py-3 text-slate-600 hidden sm:table-cell">{doctor?.name ?? "—"}</td>
+      <td className="px-4 py-3">
+        <Badge variant="outline" className={`gap-1 font-medium ${meta.className}`}>
           <Icon className="h-3 w-3" />
           {meta.label}
         </Badge>
-        <div className="min-w-0">
-          <div className="font-medium truncate">{patient?.name ?? "Unknown patient"}</div>
-          <div className="text-xs text-muted-foreground truncate">
-            {doctor ? `${doctor.name}${doctor.specialty ? ` · ${doctor.specialty}` : ""}` : "No doctor assigned"} · Checked in {checkIn}
-            {entry.priority === "urgent" ? " · Urgent" : ""}
-          </div>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center justify-end gap-1">
+          {token.status === "waiting" && (
+            <Button size="sm" variant="ghost" className="text-blue-700 hover:bg-blue-50" onClick={() => onUpdate(token.id, "in_consultation")}>Start</Button>
+          )}
+          {token.status === "in_consultation" && (
+            <Button size="sm" variant="ghost" className="text-emerald-700 hover:bg-emerald-50" onClick={() => onUpdate(token.id, "completed")}>Complete</Button>
+          )}
+          {(token.status === "waiting" || token.status === "in_consultation") && (
+            <Button size="sm" variant="ghost" className="text-rose-700 hover:bg-rose-50" onClick={() => onUpdate(token.id, "no_show")}>No Show</Button>
+          )}
         </div>
-      </div>
-      <div className="flex items-center gap-2">
-        {onStart && <Button size="sm" onClick={onStart}>Start</Button>}
-        {onComplete && <Button size="sm" onClick={onComplete}>Complete</Button>}
-        {onNoShow && <Button size="sm" variant="outline" onClick={onNoShow}>No-show</Button>}
-        {onRemove && <Button size="sm" variant="ghost" onClick={onRemove}>Remove</Button>}
-      </div>
-    </div>
+      </td>
+    </tr>
   );
 }
 
-function AddToQueueDialog({ patients, doctors, onCreated }: { patients: Patient[]; doctors: Doctor[]; onCreated: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<"existing" | "new">(patients.length ? "existing" : "new");
-  const [patientId, setPatientId] = useState<string>("");
+function AddPatientCard({ clinicId, doctors, disabled, onAdded }: { clinicId?: string; doctors: Doctor[]; disabled: boolean; onAdded: () => void }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [doctorId, setDoctorId] = useState<string>("");
-  const [priority, setPriority] = useState<"normal" | "urgent">("normal");
-  const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
+    if (!clinicId) return toast.error("Clinic not loaded");
+    if (!name.trim()) return toast.error("Patient name required");
     setSaving(true);
-    let pid = patientId;
-    if (mode === "new") {
-      if (!name.trim()) { setSaving(false); return toast.error("Name required"); }
-      const { data, error } = await supabase.from("patients").insert({ name: name.trim(), phone: phone || null }).select("id").single();
-      if (error || !data) { setSaving(false); return toast.error(error?.message ?? "Failed"); }
-      pid = data.id;
-    }
-    if (!pid) { setSaving(false); return toast.error("Select a patient"); }
-    const { error } = await supabase.from("queue_entries").insert({
-      patient_id: pid,
+    const { error } = await supabase.from("tokens").insert({
+      clinic_id: clinicId,
+      patient_name: name.trim(),
+      phone: phone.trim() || null,
       doctor_id: doctorId || null,
-      priority,
-      notes: notes || null,
+      token_number: 0, // trigger assigns
     });
     setSaving(false);
     if (error) return toast.error(error.message);
-    toast.success("Added to queue");
-    setOpen(false);
-    setName(""); setPhone(""); setNotes(""); setPatientId(""); setDoctorId(""); setPriority("normal");
-    onCreated();
+    toast.success("Patient added to queue");
+    setName(""); setPhone(""); setDoctorId("");
+    onAdded();
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Add patient</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add to queue</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <Button type="button" variant={mode === "existing" ? "default" : "outline"} size="sm" onClick={() => setMode("existing")}>Existing patient</Button>
-            <Button type="button" variant={mode === "new" ? "default" : "outline"} size="sm" onClick={() => setMode("new")}>New patient</Button>
+    <Card className="border-slate-200 shadow-sm sticky top-6">
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center">
+            <UserPlus className="h-4 w-4" />
           </div>
-          {mode === "existing" ? (
-            <div className="space-y-2">
-              <Label>Patient</Label>
-              <Select value={patientId} onValueChange={setPatientId}>
-                <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
-                <SelectContent>
-                  {patients.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}{p.phone ? ` · ${p.phone}` : ""}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2 col-span-2">
-                <Label>Name</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-              <div className="space-y-2 col-span-2">
-                <Label>Phone</Label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
-              </div>
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label>Doctor (optional)</Label>
+          <div>
+            <CardTitle className="text-base text-slate-900">Add Patient</CardTitle>
+            <CardDescription className="text-xs">Check a patient into the queue</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <fieldset disabled={disabled} className="space-y-4 disabled:opacity-50">
+          <div className="space-y-1.5">
+            <Label htmlFor="pname" className="text-xs font-medium text-slate-700">Patient Name</Label>
+            <Input id="pname" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="border-slate-200" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="phone" className="text-xs font-medium text-slate-700">Phone Number</Label>
+            <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 000 0000" className="border-slate-200" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-slate-700">Doctor</Label>
             <Select value={doctorId} onValueChange={setDoctorId}>
-              <SelectTrigger><SelectValue placeholder="Any doctor" /></SelectTrigger>
+              <SelectTrigger className="border-slate-200"><SelectValue placeholder="Select a doctor" /></SelectTrigger>
               <SelectContent>
+                {doctors.length === 0 && <div className="px-2 py-1.5 text-sm text-slate-500">No doctors yet</div>}
                 {doctors.map((d) => (
                   <SelectItem key={d.id} value={d.id}>{d.name}{d.specialty ? ` · ${d.specialty}` : ""}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Priority</Label>
-            <Select value={priority} onValueChange={(v) => setPriority(v as any)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="normal">Normal</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Notes</Label>
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button onClick={submit} disabled={saving}>{saving ? "Adding..." : "Add to queue"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <Button onClick={submit} disabled={saving || disabled} className="w-full bg-sky-600 hover:bg-sky-700">
+            {saving ? "Adding..." : "Add to Queue"}
+          </Button>
+        </fieldset>
+        {disabled && (
+          <p className="text-xs text-rose-600 text-center">Adding patients is disabled while the trial is expired.</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
-function ManageDoctorsDialog({ doctors, onChange }: { doctors: Doctor[]; onChange: () => void }) {
+function ManageDoctorsDialog({ doctors, clinicId, onChange }: { doctors: Doctor[]; clinicId?: string; onChange: () => void }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [specialty, setSpecialty] = useState("");
   const add = async () => {
+    if (!clinicId) return toast.error("Clinic not loaded");
     if (!name.trim()) return toast.error("Name required");
-    const { error } = await supabase.from("doctors").insert({ name: name.trim(), specialty: specialty || null });
+    const { error } = await supabase.from("doctors").insert({ clinic_id: clinicId, name: name.trim(), specialty: specialty.trim() || null });
     if (error) return toast.error(error.message);
     setName(""); setSpecialty("");
     onChange();
@@ -349,31 +300,34 @@ function ManageDoctorsDialog({ doctors, onChange }: { doctors: Doctor[]; onChang
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">Doctors</Button>
+        <Button size="sm" variant="outline" className="border-slate-200 text-slate-700">Doctors</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Doctors</DialogTitle>
+          <DialogTitle>Manage Doctors</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
             <Input placeholder="Specialty" value={specialty} onChange={(e) => setSpecialty(e.target.value)} />
           </div>
-          <Button onClick={add} size="sm">Add doctor</Button>
+          <Button onClick={add} size="sm" className="bg-sky-600 hover:bg-sky-700">Add doctor</Button>
           <div className="space-y-2 pt-2">
-            {doctors.length === 0 && <div className="text-sm text-muted-foreground">No doctors yet.</div>}
+            {doctors.length === 0 && <div className="text-sm text-slate-500">No doctors yet.</div>}
             {doctors.map((d) => (
-              <div key={d.id} className="flex items-center justify-between border rounded-md px-3 py-2">
+              <div key={d.id} className="flex items-center justify-between border border-slate-200 rounded-md px-3 py-2">
                 <div className="text-sm">
-                  <div className="font-medium">{d.name}</div>
-                  {d.specialty && <div className="text-xs text-muted-foreground">{d.specialty}</div>}
+                  <div className="font-medium text-slate-900">{d.name}</div>
+                  {d.specialty && <div className="text-xs text-slate-500">{d.specialty}</div>}
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => remove(d.id)}>Remove</Button>
+                <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50" onClick={() => remove(d.id)}>Remove</Button>
               </div>
             ))}
           </div>
         </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>Done</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
