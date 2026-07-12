@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       clinics: {
         Row: {
+          address: string | null
           created_at: string
           id: string
           name: string
@@ -24,6 +25,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          address?: string | null
           created_at?: string
           id?: string
           name?: string
@@ -32,6 +34,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          address?: string | null
           created_at?: string
           id?: string
           name?: string
@@ -83,16 +86,22 @@ export type Database = {
         Row: {
           clinic_id: string
           created_at: string
+          id: string
+          name: string | null
           user_id: string
         }
         Insert: {
           clinic_id: string
           created_at?: string
+          id?: string
+          name?: string | null
           user_id: string
         }
         Update: {
           clinic_id?: string
           created_at?: string
+          id?: string
+          name?: string | null
           user_id?: string
         }
         Relationships: [
@@ -112,7 +121,7 @@ export type Database = {
           doctor_id: string | null
           id: string
           patient_name: string
-          phone: string | null
+          phone_number: string | null
           status: string
           token_number: number
           updated_at: string
@@ -123,7 +132,7 @@ export type Database = {
           doctor_id?: string | null
           id?: string
           patient_name: string
-          phone?: string | null
+          phone_number?: string | null
           status?: string
           token_number: number
           updated_at?: string
@@ -134,7 +143,7 @@ export type Database = {
           doctor_id?: string | null
           id?: string
           patient_name?: string
-          phone?: string | null
+          phone_number?: string | null
           status?: string
           token_number?: number
           updated_at?: string
