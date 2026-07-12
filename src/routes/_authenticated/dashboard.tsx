@@ -21,7 +21,7 @@ type Token = {
   id: string;
   token_number: number;
   patient_name: string;
-  phone: string | null;
+  phone_number: string | null;
   doctor_id: string | null;
   status: "waiting" | "in_consultation" | "completed" | "no_show";
   created_at: string;
@@ -184,7 +184,7 @@ function TokenRow({ token, doctor, onUpdate }: { token: Token; doctor?: Doctor; 
         </div>
       </td>
       <td className="px-4 py-3 font-medium text-slate-900">{token.patient_name}</td>
-      <td className="px-4 py-3 text-slate-600 hidden md:table-cell">{token.phone || "—"}</td>
+      <td className="px-4 py-3 text-slate-600 hidden md:table-cell">{token.phone_number || "—"}</td>
       <td className="px-4 py-3 text-slate-600 hidden sm:table-cell">{doctor?.name ?? "—"}</td>
       <td className="px-4 py-3">
         <Badge variant="outline" className={`gap-1 font-medium ${meta.className}`}>
@@ -222,7 +222,7 @@ function AddPatientCard({ clinicId, doctors, disabled, onAdded }: { clinicId?: s
     const { error } = await supabase.from("tokens").insert({
       clinic_id: clinicId,
       patient_name: name.trim(),
-      phone: phone.trim() || null,
+      phone_number: phone.trim() || "",
       doctor_id: doctorId || null,
       token_number: 0, // trigger assigns
     });
