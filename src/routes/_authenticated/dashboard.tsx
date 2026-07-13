@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { sendWhatsAppMessage } from "@/lib/whatsapp.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,8 +10,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { LogOut, Stethoscope, Clock, CheckCircle2, PlayCircle, XCircle, UserPlus, AlertTriangle, Sparkles } from "lucide-react";
+import {
+  LogOut, Stethoscope, Clock, CheckCircle2, PlayCircle, XCircle,
+  UserPlus, AlertTriangle, Sparkles, CalendarIcon, MessageSquare, Bell, CalendarClock,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -19,11 +29,14 @@ type Clinic = { id: string; name: string; status: string; trial_ends_at: string 
 type Doctor = { id: string; name: string; specialty: string | null };
 type Token = {
   id: string;
+  clinic_id: string;
   token_number: number;
   patient_name: string;
   phone_number: string | null;
   doctor_id: string | null;
   status: "waiting" | "in_consultation" | "completed" | "no_show";
+  appointment_date: string;
+  appointment_time: string | null;
   created_at: string;
 };
 
@@ -34,27 +47,36 @@ const statusMeta: Record<Token["status"], { label: string; className: string; ic
   no_show: { label: "No Show", className: "bg-rose-100 text-rose-700 border-rose-200", icon: XCircle },
 };
 
+const todayISO = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return format(d, "yyyy-MM-dd");
+};
+
 function Dashboard() {
   const navigate = useNavigate();
   const [email, setEmail] = useState<string | null>(null);
   const [clinic, setClinic] = useState<Clinic | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [tokens, setTokens] = useState<Token[]>([]);
+  const [tunnelUrl, setTunnelUrl] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [doctorFilter, setDoctorFilter] = useState<string>("all");
 
+  const sendWhatsApp = useServerFn(sendWhatsAppMessage);
   const doctorMap = useMemo(() => new Map(doctors.map((d) => [d.id, d])), [doctors]);
 
   const loadAll = async () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const [c, d, t] = await Promise.all([
+    const [c, d, t, s] = await Promise.all([
       supabase.from("clinics").select("id,name,status,trial_ends_at").limit(1).maybeSingle(),
       supabase.from("doctors").select("id,name,specialty").eq("is_active", true).order("name"),
-      supabase.from("tokens").select("*").gte("created_at", today.toISOString()).order("token_number", { ascending: true }),
+      supabase.from("tokens").select("*").order("appointment_date").order("token_number", { ascending: true }),
+      supabase.from("clinic_settings").select("tunnel_url").maybeSingle(),
     ]);
     if (c.data) setClinic(c.data as Clinic);
     if (d.data) setDoctors(d.data as Doctor[]);
     if (t.data) setTokens(t.data as Token[]);
+    if (s.data) setTunnelUrl((s.data as { tunnel_url: string | null }).tunnel_url ?? "");
     setLoading(false);
   };
 
@@ -81,13 +103,36 @@ function Dashboard() {
     toast.success("Updated");
   };
 
+  const notifyNextInLine = async (t: Token) => {
+    if (!t.phone_number) return toast.error("No phone number on file");
+    const doctor = t.doctor_id ? doctorMap.get(t.doctor_id) : undefined;
+    const res = await sendWhatsApp({
+      data: {
+        phone: t.phone_number,
+        patientName: t.patient_name,
+        doctorName: doctor?.name ?? "your doctor",
+        appointmentDate: t.appointment_date,
+        appointmentTime: t.appointment_time,
+        tokenNumber: t.token_number,
+        variant: "next_in_line",
+      },
+    });
+    if (res.ok) toast.success("WhatsApp notification sent");
+    else toast.warning(res.error ?? "WhatsApp send failed");
+  };
+
   const trialDaysLeft = clinic ? Math.ceil((new Date(clinic.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
   const trialExpired = clinic ? new Date(clinic.trial_ends_at).getTime() < Date.now() && clinic.status !== "active" : false;
   const showTrialBanner = clinic?.status === "trial" && !trialExpired;
 
+  const today = todayISO();
+  const todayTokens = tokens
+    .filter((t) => t.appointment_date === today)
+    .filter((t) => doctorFilter === "all" || t.doctor_id === doctorFilter);
+  const upcomingTokens = tokens.filter((t) => t.appointment_date > today);
+
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Trial / Expiry banner */}
       {trialExpired && (
         <div className="bg-rose-600 text-white px-6 py-3 flex items-center justify-center gap-2 text-sm font-medium">
           <AlertTriangle className="h-4 w-4" />
@@ -114,6 +159,8 @@ function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <WhatsAppBadge configured={Boolean(tunnelUrl)} />
+            <WhatsAppSettingsDialog clinicId={clinic?.id} initial={tunnelUrl} onSaved={loadAll} />
             <ManageDoctorsDialog doctors={doctors} clinicId={clinic?.id} onChange={loadAll} />
             <Button variant="ghost" size="icon" onClick={handleSignOut} aria-label="Sign out" className="text-slate-500 hover:text-slate-900">
               <LogOut className="h-4 w-4" />
@@ -123,57 +170,170 @@ function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Add Patient */}
         <section className="lg:col-span-1">
           <AddPatientCard
             clinicId={clinic?.id}
             doctors={doctors}
             disabled={trialExpired}
-            onAdded={loadAll}
+            onAdded={async (createdToken) => {
+              await loadAll();
+              // Fire confirmation WhatsApp (non-blocking UX)
+              const doctor = createdToken.doctor_id ? doctorMap.get(createdToken.doctor_id) : undefined;
+              if (createdToken.phone_number && tunnelUrl) {
+                const res = await sendWhatsApp({
+                  data: {
+                    phone: createdToken.phone_number,
+                    patientName: createdToken.patient_name,
+                    doctorName: doctor?.name ?? "your doctor",
+                    appointmentDate: createdToken.appointment_date,
+                    appointmentTime: createdToken.appointment_time,
+                    tokenNumber: createdToken.token_number,
+                    variant: "confirmation",
+                  },
+                });
+                if (res.ok) toast.success("WhatsApp confirmation sent");
+                else toast.warning(res.error ?? "WhatsApp send failed");
+              }
+            }}
           />
         </section>
 
-        {/* Queue */}
         <section className="lg:col-span-2 space-y-4">
-          <div className="flex items-baseline justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Today's Queue</h2>
-              <p className="text-sm text-slate-500 mt-0.5">{tokens.length} {tokens.length === 1 ? "patient" : "patients"}</p>
-            </div>
-          </div>
+          <Tabs defaultValue="today">
+            <TabsList>
+              <TabsTrigger value="today" className="gap-1.5"><Clock className="h-3.5 w-3.5" />Today's Queue</TabsTrigger>
+              <TabsTrigger value="upcoming" className="gap-1.5"><CalendarClock className="h-3.5 w-3.5" />Upcoming</TabsTrigger>
+            </TabsList>
 
-          <Card className="border-slate-200 shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                    <th className="px-4 py-3 w-16">Token</th>
-                    <th className="px-4 py-3">Patient</th>
-                    <th className="px-4 py-3 hidden md:table-cell">Phone</th>
-                    <th className="px-4 py-3 hidden sm:table-cell">Doctor</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {loading ? (
-                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">Loading…</td></tr>
-                  ) : tokens.length === 0 ? (
-                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">No patients in the queue today.</td></tr>
-                  ) : tokens.map((t) => (
-                    <TokenRow key={t.id} token={t} doctor={t.doctor_id ? doctorMap.get(t.doctor_id) : undefined} onUpdate={updateStatus} />
+            <TabsContent value="today" className="space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Today's Queue</h2>
+                  <p className="text-sm text-slate-500 mt-0.5">{todayTokens.length} {todayTokens.length === 1 ? "patient" : "patients"}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setDoctorFilter("all")}
+                    className={cn("px-3 py-1.5 rounded-full text-xs font-medium border", doctorFilter === "all" ? "bg-sky-600 text-white border-sky-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
+                  >All</button>
+                  {doctors.map((d) => (
+                    <button
+                      key={d.id}
+                      onClick={() => setDoctorFilter(d.id)}
+                      className={cn("px-3 py-1.5 rounded-full text-xs font-medium border", doctorFilter === d.id ? "bg-sky-600 text-white border-sky-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
+                    >{d.name}</button>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+                </div>
+              </div>
+
+              <QueueTable
+                tokens={todayTokens}
+                loading={loading}
+                doctorMap={doctorMap}
+                onUpdate={updateStatus}
+                onNotifyNext={notifyNextInLine}
+                onRescheduled={loadAll}
+                emptyText="No patients in the queue today."
+                showTime
+              />
+            </TabsContent>
+
+            <TabsContent value="upcoming" className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Upcoming Appointments</h2>
+                <p className="text-sm text-slate-500 mt-0.5">{upcomingTokens.length} scheduled</p>
+              </div>
+              <QueueTable
+                tokens={upcomingTokens}
+                loading={loading}
+                doctorMap={doctorMap}
+                onUpdate={updateStatus}
+                onNotifyNext={notifyNextInLine}
+                onRescheduled={loadAll}
+                emptyText="No upcoming appointments."
+                showDate
+                showTime
+              />
+            </TabsContent>
+          </Tabs>
         </section>
       </main>
     </div>
   );
 }
 
-function TokenRow({ token, doctor, onUpdate }: { token: Token; doctor?: Doctor; onUpdate: (id: string, s: Token["status"]) => void }) {
+function WhatsAppBadge({ configured }: { configured: boolean }) {
+  return (
+    <span className={cn("hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border",
+      configured ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200")}>
+      <MessageSquare className="h-3 w-3" />
+      {configured ? "WhatsApp ready" : "WhatsApp off"}
+    </span>
+  );
+}
+
+function QueueTable({
+  tokens, loading, doctorMap, onUpdate, onNotifyNext, onRescheduled, emptyText, showDate, showTime,
+}: {
+  tokens: Token[];
+  loading: boolean;
+  doctorMap: Map<string, Doctor>;
+  onUpdate: (id: string, s: Token["status"]) => void;
+  onNotifyNext: (t: Token) => void;
+  onRescheduled: () => void;
+  emptyText: string;
+  showDate?: boolean;
+  showTime?: boolean;
+}) {
+  return (
+    <Card className="border-slate-200 shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <th className="px-4 py-3 w-16">Token</th>
+              <th className="px-4 py-3">Patient</th>
+              <th className="px-4 py-3 hidden md:table-cell">Phone</th>
+              <th className="px-4 py-3 hidden sm:table-cell">Doctor</th>
+              {showDate && <th className="px-4 py-3 hidden md:table-cell">Date</th>}
+              {showTime && <th className="px-4 py-3 hidden lg:table-cell">Time</th>}
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {loading ? (
+              <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400">Loading…</td></tr>
+            ) : tokens.length === 0 ? (
+              <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400">{emptyText}</td></tr>
+            ) : tokens.map((t) => (
+              <TokenRow
+                key={t.id}
+                token={t}
+                doctor={t.doctor_id ? doctorMap.get(t.doctor_id) : undefined}
+                onUpdate={onUpdate}
+                onNotifyNext={onNotifyNext}
+                onRescheduled={onRescheduled}
+                showDate={showDate}
+                showTime={showTime}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function TokenRow({
+  token, doctor, onUpdate, onNotifyNext, onRescheduled, showDate, showTime,
+}: {
+  token: Token; doctor?: Doctor;
+  onUpdate: (id: string, s: Token["status"]) => void;
+  onNotifyNext: (t: Token) => void;
+  onRescheduled: () => void;
+  showDate?: boolean; showTime?: boolean;
+}) {
   const meta = statusMeta[token.status];
   const Icon = meta.icon;
   return (
@@ -186,6 +346,8 @@ function TokenRow({ token, doctor, onUpdate }: { token: Token; doctor?: Doctor; 
       <td className="px-4 py-3 font-medium text-slate-900">{token.patient_name}</td>
       <td className="px-4 py-3 text-slate-600 hidden md:table-cell">{token.phone_number || "—"}</td>
       <td className="px-4 py-3 text-slate-600 hidden sm:table-cell">{doctor?.name ?? "—"}</td>
+      {showDate && <td className="px-4 py-3 text-slate-600 hidden md:table-cell">{token.appointment_date}</td>}
+      {showTime && <td className="px-4 py-3 text-slate-600 hidden lg:table-cell">{token.appointment_time || "—"}</td>}
       <td className="px-4 py-3">
         <Badge variant="outline" className={`gap-1 font-medium ${meta.className}`}>
           <Icon className="h-3 w-3" />
@@ -193,9 +355,14 @@ function TokenRow({ token, doctor, onUpdate }: { token: Token; doctor?: Doctor; 
         </Badge>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1 flex-wrap">
           {token.status === "waiting" && (
-            <Button size="sm" variant="ghost" className="text-blue-700 hover:bg-blue-50" onClick={() => onUpdate(token.id, "in_consultation")}>Start</Button>
+            <>
+              <Button size="sm" variant="ghost" className="text-amber-700 hover:bg-amber-50" onClick={() => onNotifyNext(token)}>
+                <Bell className="h-3.5 w-3.5 mr-1" />Next
+              </Button>
+              <Button size="sm" variant="ghost" className="text-blue-700 hover:bg-blue-50" onClick={() => onUpdate(token.id, "in_consultation")}>Start</Button>
+            </>
           )}
           {token.status === "in_consultation" && (
             <Button size="sm" variant="ghost" className="text-emerald-700 hover:bg-emerald-50" onClick={() => onUpdate(token.id, "completed")}>Complete</Button>
@@ -203,34 +370,109 @@ function TokenRow({ token, doctor, onUpdate }: { token: Token; doctor?: Doctor; 
           {(token.status === "waiting" || token.status === "in_consultation") && (
             <Button size="sm" variant="ghost" className="text-rose-700 hover:bg-rose-50" onClick={() => onUpdate(token.id, "no_show")}>No Show</Button>
           )}
+          <RescheduleDialog token={token} onSaved={onRescheduled} />
         </div>
       </td>
     </tr>
   );
 }
 
-function AddPatientCard({ clinicId, doctors, disabled, onAdded }: { clinicId?: string; doctors: Doctor[]; disabled: boolean; onAdded: () => void }) {
+function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState<Date | undefined>(token.appointment_date ? new Date(token.appointment_date + "T00:00:00") : new Date());
+  const [time, setTime] = useState(token.appointment_time ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!date) return toast.error("Pick a date");
+    setSaving(true);
+    const { error } = await supabase.from("tokens").update({
+      appointment_date: format(date, "yyyy-MM-dd"),
+      appointment_time: time || null,
+    }).eq("id", token.id);
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("Rescheduled");
+    setOpen(false);
+    onSaved();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="ghost" className="text-slate-600 hover:bg-slate-100">
+          <CalendarClock className="h-3.5 w-3.5 mr-1" />Reschedule
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Reschedule appointment</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-slate-700">Appointment Date</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {date ? format(date, "PPP") : "Pick a date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar mode="single" selected={date} onSelect={setDate} initialFocus className={cn("p-3 pointer-events-auto")} />
+              </PopoverContent>
+            </Popover>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-slate-700">Appointment Time</Label>
+            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={save} disabled={saving} className="bg-sky-600 hover:bg-sky-700">{saving ? "Saving..." : "Save"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddPatientCard({ clinicId, doctors, disabled, onAdded }: {
+  clinicId?: string; doctors: Doctor[]; disabled: boolean;
+  onAdded: (t: Token) => void;
+}) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [doctorId, setDoctorId] = useState<string>("");
+  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [time, setTime] = useState("");
   const [saving, setSaving] = useState(false);
+  const [touched, setTouched] = useState(false);
+
+  const phoneValid = /^[0-9]{10}$/.test(phone);
+  const phoneError = touched && !phoneValid;
 
   const submit = async () => {
+    setTouched(true);
     if (!clinicId) return toast.error("Clinic not loaded");
     if (!name.trim()) return toast.error("Patient name required");
+    if (!phoneValid) return toast.error("Enter a valid 10-digit phone number");
+    if (!date) return toast.error("Pick an appointment date");
     setSaving(true);
-    const { error } = await supabase.from("tokens").insert({
+    const { data, error } = await supabase.from("tokens").insert({
       clinic_id: clinicId,
       patient_name: name.trim(),
-      phone_number: phone.trim() || "",
+      phone_number: phone,
       doctor_id: doctorId || null,
-      token_number: 0, // trigger assigns
-    });
+      token_number: 0,
+      appointment_date: format(date, "yyyy-MM-dd"),
+      appointment_time: time || null,
+    }).select("*").single();
     setSaving(false);
     if (error) return toast.error(error.message);
-    toast.success("Patient added to queue");
-    setName(""); setPhone(""); setDoctorId("");
-    onAdded();
+    toast.success(`Patient added — Token #${(data as Token).token_number}`);
+    setName(""); setPhone(""); setDoctorId(""); setTime(""); setDate(new Date()); setTouched(false);
+    onAdded(data as Token);
   };
 
   return (
@@ -253,8 +495,17 @@ function AddPatientCard({ clinicId, doctors, disabled, onAdded }: { clinicId?: s
             <Input id="pname" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="border-slate-200" />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="phone" className="text-xs font-medium text-slate-700">Phone Number</Label>
-            <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 000 0000" className="border-slate-200" />
+            <Label htmlFor="phone" className="text-xs font-medium text-slate-700">Phone Number <span className="text-rose-500">*</span></Label>
+            <Input
+              id="phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              onBlur={() => setTouched(true)}
+              inputMode="numeric"
+              placeholder="10-digit mobile number"
+              className={cn("border-slate-200", phoneError && "border-rose-400 focus-visible:ring-rose-400")}
+            />
+            {phoneError && <p className="text-xs text-rose-600">Enter exactly 10 digits.</p>}
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-slate-700">Doctor</Label>
@@ -267,6 +518,36 @@ function AddPatientCard({ clinicId, doctors, disabled, onAdded }: { clinicId?: s
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-700">Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("w-full justify-start text-left font-normal border-slate-200", !date && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {date ? format(date, "MMM d") : "Pick"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={date}
+                    onSelect={setDate}
+                    disabled={(d) => {
+                      const today = new Date(); today.setHours(0, 0, 0, 0);
+                      return d < today;
+                    }}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-700">Time</Label>
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="border-slate-200" />
+            </div>
           </div>
           <Button onClick={submit} disabled={saving || disabled} className="w-full bg-sky-600 hover:bg-sky-700">
             {saving ? "Adding..." : "Add to Queue"}
@@ -327,6 +608,60 @@ function ManageDoctorsDialog({ doctors, clinicId, onChange }: { doctors: Doctor[
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WhatsAppSettingsDialog({ clinicId, initial, onSaved }: { clinicId?: string; initial: string; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState(initial);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setUrl(initial); }, [initial]);
+
+  const save = async () => {
+    if (!clinicId) return toast.error("Clinic not loaded");
+    setSaving(true);
+    const { error } = await supabase.from("clinic_settings").upsert({
+      clinic_id: clinicId,
+      tunnel_url: url.trim() || null,
+    }, { onConflict: "clinic_id" });
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("WhatsApp settings saved");
+    setOpen(false);
+    onSaved();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="border-slate-200 text-slate-700">
+          <MessageSquare className="h-3.5 w-3.5 mr-1.5" />WhatsApp
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>WhatsApp Settings</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-slate-700">Tunnel URL</Label>
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://your-tunnel.loca.lt"
+            />
+            <p className="text-xs text-slate-500">
+              Public URL of your local WhatsApp server (ngrok / localtunnel). The app will POST to <code>{"{URL}/send-message"}</code>.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={save} disabled={saving} className="bg-sky-600 hover:bg-sky-700">{saving ? "Saving..." : "Save"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

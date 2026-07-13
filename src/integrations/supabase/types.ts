@@ -14,6 +14,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      clinic_settings: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          tunnel_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          tunnel_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          tunnel_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_settings_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: true
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinics: {
         Row: {
           address: string | null
@@ -116,6 +145,8 @@ export type Database = {
       }
       tokens: {
         Row: {
+          appointment_date: string
+          appointment_time: string | null
           clinic_id: string
           created_at: string
           doctor_id: string | null
@@ -125,8 +156,11 @@ export type Database = {
           status: string
           token_number: number
           updated_at: string
+          whatsapp_sent_at: string | null
         }
         Insert: {
+          appointment_date?: string
+          appointment_time?: string | null
           clinic_id: string
           created_at?: string
           doctor_id?: string | null
@@ -136,8 +170,11 @@ export type Database = {
           status?: string
           token_number: number
           updated_at?: string
+          whatsapp_sent_at?: string | null
         }
         Update: {
+          appointment_date?: string
+          appointment_time?: string | null
           clinic_id?: string
           created_at?: string
           doctor_id?: string | null
@@ -147,6 +184,7 @@ export type Database = {
           status?: string
           token_number?: number
           updated_at?: string
+          whatsapp_sent_at?: string | null
         }
         Relationships: [
           {
