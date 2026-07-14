@@ -45,7 +45,9 @@ export type Database = {
       }
       clinics: {
         Row: {
-          address: string | null
+          address: string
+          avg_time_per_patient: number
+          clinic_mobile: string | null
           created_at: string
           id: string
           name: string
@@ -54,7 +56,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          address?: string | null
+          address: string
+          avg_time_per_patient?: number
+          clinic_mobile?: string | null
           created_at?: string
           id?: string
           name?: string
@@ -63,7 +67,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          address?: string | null
+          address?: string
+          avg_time_per_patient?: number
+          clinic_mobile?: string | null
           created_at?: string
           id?: string
           name?: string
@@ -149,13 +155,18 @@ export type Database = {
           appointment_time: string | null
           clinic_id: string
           created_at: string
+          doctor_arrived_sent_at: string | null
           doctor_id: string | null
           id: string
+          last_position_notified: number | null
           patient_name: string
-          phone_number: string | null
+          phone_number: string
+          reminder_24h_sent_at: string | null
           status: string
           token_number: number
+          token_update_count: number
           updated_at: string
+          whatsapp_messages_sent: number
           whatsapp_sent_at: string | null
         }
         Insert: {
@@ -163,13 +174,18 @@ export type Database = {
           appointment_time?: string | null
           clinic_id: string
           created_at?: string
+          doctor_arrived_sent_at?: string | null
           doctor_id?: string | null
           id?: string
+          last_position_notified?: number | null
           patient_name: string
-          phone_number?: string | null
+          phone_number: string
+          reminder_24h_sent_at?: string | null
           status?: string
           token_number: number
+          token_update_count?: number
           updated_at?: string
+          whatsapp_messages_sent?: number
           whatsapp_sent_at?: string | null
         }
         Update: {
@@ -177,13 +193,18 @@ export type Database = {
           appointment_time?: string | null
           clinic_id?: string
           created_at?: string
+          doctor_arrived_sent_at?: string | null
           doctor_id?: string | null
           id?: string
+          last_position_notified?: number | null
           patient_name?: string
-          phone_number?: string | null
+          phone_number?: string
+          reminder_24h_sent_at?: string | null
           status?: string
           token_number?: number
+          token_update_count?: number
           updated_at?: string
+          whatsapp_messages_sent?: number
           whatsapp_sent_at?: string | null
         }
         Relationships: [
