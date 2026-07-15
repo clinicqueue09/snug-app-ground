@@ -735,11 +735,13 @@ function ManageDoctorsDialog({ doctors, clinicId, onChange }: { doctors: Doctor[
   const add = async () => {
     if (!clinicId) return toast.error("Clinic not loaded");
     if (!name.trim()) return toast.error("Name required");
-    const { error } = await supabase.from("doctors").insert({ clinic_id: clinicId, name: name.trim(), specialty: specialty.trim() || null });
+    if (!specialty.trim()) return toast.error("Specialty required");
+    const { error } = await supabase.from("doctors").insert({ clinic_id: clinicId, name: name.trim(), specialty: specialty.trim() });
     if (error) return toast.error(error.message);
     setName(""); setSpecialty("");
     onChange();
   };
+
   const remove = async (id: string) => {
     const { error } = await supabase.from("doctors").update({ is_active: false }).eq("id", id);
     if (error) return toast.error(error.message);
