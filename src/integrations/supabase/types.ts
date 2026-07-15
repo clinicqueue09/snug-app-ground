@@ -81,30 +81,33 @@ export type Database = {
       }
       doctors: {
         Row: {
+          avg_time_per_patient: number | null
           clinic_id: string
           created_at: string
           id: string
           is_active: boolean
           name: string
-          specialty: string | null
+          specialty: string
           updated_at: string
         }
         Insert: {
+          avg_time_per_patient?: number | null
           clinic_id: string
           created_at?: string
           id?: string
           is_active?: boolean
           name: string
-          specialty?: string | null
+          specialty: string
           updated_at?: string
         }
         Update: {
+          avg_time_per_patient?: number | null
           clinic_id?: string
           created_at?: string
           id?: string
           is_active?: boolean
           name?: string
-          specialty?: string | null
+          specialty?: string
           updated_at?: string
         }
         Relationships: [
