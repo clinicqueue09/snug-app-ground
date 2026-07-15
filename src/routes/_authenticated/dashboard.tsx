@@ -30,7 +30,7 @@ type Clinic = {
   id: string; name: string; status: string; trial_ends_at: string;
   address: string; clinic_mobile: string | null; avg_time_per_patient: number;
 };
-type Doctor = { id: string; name: string; specialty: string | null };
+type Doctor = { id: string; name: string; specialty: string | null; avg_time_per_patient: number | null };
 type Token = {
   id: string;
   clinic_id: string;
