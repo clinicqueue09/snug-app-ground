@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { sendWhatsAppMessage, advanceQueueNotifications } from "@/lib/whatsapp.functions";
+import { sendWhatsAppMessage, advanceQueueNotifications, sendDoctorArrivedForDoctor } from "@/lib/whatsapp.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
