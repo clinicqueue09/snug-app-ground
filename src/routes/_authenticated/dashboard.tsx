@@ -70,6 +70,8 @@ function Dashboard() {
 
   const sendWhatsApp = useServerFn(sendWhatsAppMessage);
   const advanceQueue = useServerFn(advanceQueueNotifications);
+  const sendDoctorArrived = useServerFn(sendDoctorArrivedForDoctor);
+
   const doctorMap = useMemo(() => new Map(doctors.map((d) => [d.id, d])), [doctors]);
 
   const loadAll = async () => {
