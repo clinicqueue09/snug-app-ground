@@ -75,7 +75,7 @@ function Dashboard() {
   const loadAll = async () => {
     const [c, d, t, s] = await Promise.all([
       supabase.from("clinics").select("id,name,status,trial_ends_at,address,clinic_mobile,avg_time_per_patient").limit(1).maybeSingle(),
-      supabase.from("doctors").select("id,name,specialty").eq("is_active", true).order("name"),
+      supabase.from("doctors").select("id,name,specialty,avg_time_per_patient").eq("is_active", true).order("name"),
       supabase.from("tokens").select("*").order("appointment_date").order("token_number", { ascending: true }),
       supabase.from("clinic_settings").select("tunnel_url").maybeSingle(),
     ]);
