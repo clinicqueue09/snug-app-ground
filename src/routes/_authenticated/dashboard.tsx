@@ -852,3 +852,85 @@ function WhatsAppSettingsDialog({ clinicId, initial, onSaved }: { clinicId?: str
     </Dialog>
   );
 }
+
+function DoctorControlsStrip({ doctors, disabled, onDoctorArrived, onAvgChanged }: {
+  doctors: Doctor[]; disabled: boolean;
+  onDoctorArrived: (doctorId: string) => void | Promise<void>;
+  onAvgChanged: () => void;
+}) {
+  if (doctors.length === 0) return null;
+  return (
+    <Card className="border-slate-200 shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm text-slate-700">Active doctors</CardTitle>
+        <CardDescription className="text-xs">Set per-doctor average consult time and mark the doctor's arrival for today.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {doctors.map((d) => (
+            <DoctorControlCard key={d.id} doctor={d} disabled={disabled} onDoctorArrived={onDoctorArrived} onAvgChanged={onAvgChanged} />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DoctorControlCard({ doctor, disabled, onDoctorArrived, onAvgChanged }: {
+  doctor: Doctor; disabled: boolean;
+  onDoctorArrived: (doctorId: string) => void | Promise<void>;
+  onAvgChanged: () => void;
+}) {
+  const [avg, setAvg] = useState<string>(doctor.avg_time_per_patient == null ? "" : String(doctor.avg_time_per_patient));
+  const [saving, setSaving] = useState(false);
+  const [arriving, setArriving] = useState(false);
+  useEffect(() => { setAvg(doctor.avg_time_per_patient == null ? "" : String(doctor.avg_time_per_patient)); }, [doctor.avg_time_per_patient]);
+
+  const saveAvg = async () => {
+    const trimmed = avg.trim();
+    const parsed = trimmed === "" ? null : parseInt(trimmed, 10);
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 1 || parsed > 240)) {
+      return toast.error("Avg time must be 1–240 minutes (or blank).");
+    }
+    if (parsed === doctor.avg_time_per_patient) return;
+    setSaving(true);
+    const { error } = await supabase.from("doctors").update({ avg_time_per_patient: parsed }).eq("id", doctor.id);
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("Avg time updated");
+    onAvgChanged();
+  };
+
+  return (
+    <div className="border border-slate-200 rounded-lg p-3 flex flex-col gap-2 bg-white">
+      <div>
+        <div className="font-medium text-slate-900 text-sm truncate">{doctor.name}</div>
+        <div className="text-xs text-slate-500 truncate">{doctor.specialty ?? "—"}</div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Label className="text-xs text-slate-600 whitespace-nowrap">Avg (min)</Label>
+        <Input
+          inputMode="numeric"
+          value={avg}
+          onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))}
+          onBlur={saveAvg}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+          placeholder="—"
+          disabled={saving}
+          className="h-8 text-sm"
+        />
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={disabled || arriving}
+        onClick={async () => { setArriving(true); await onDoctorArrived(doctor.id); setArriving(false); }}
+        className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+      >
+        <DoorOpen className="h-3.5 w-3.5 mr-1.5" />
+        {arriving ? "Sending…" : "Doctor Arrived"}
+      </Button>
+    </div>
+  );
+}
+
