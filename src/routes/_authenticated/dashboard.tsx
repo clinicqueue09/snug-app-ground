@@ -194,12 +194,13 @@ function Dashboard() {
         <DoctorControlsStrip
           doctors={doctors}
           disabled={trialExpired}
-          onDoctorArrived={async (doctorId) => {
-            const res = await sendDoctorArrivedForDoctor({ data: { doctorId } });
+          onDoctorArrived={async (doctorId: string) => {
+            const res = await sendDoctorArrived({ data: { doctorId } });
             if (res.ok) toast.success(`Doctor-arrived alerts sent: ${res.sent ?? 0}`);
             else toast.warning(res.error ?? "Send failed");
             loadAll();
           }}
+
           onAvgChanged={loadAll}
         />
       </div>
