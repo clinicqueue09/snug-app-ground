@@ -188,7 +188,22 @@ function Dashboard() {
         </div>
       </header>
 
+      <div className="max-w-7xl mx-auto px-6 pt-6">
+        <DoctorControlsStrip
+          doctors={doctors}
+          disabled={trialExpired}
+          onDoctorArrived={async (doctorId) => {
+            const res = await sendDoctorArrivedForDoctor({ data: { doctorId } });
+            if (res.ok) toast.success(`Doctor-arrived alerts sent: ${res.sent ?? 0}`);
+            else toast.warning(res.error ?? "Send failed");
+            loadAll();
+          }}
+          onAvgChanged={loadAll}
+        />
+      </div>
+
       <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
         <section className="lg:col-span-1">
           <AddPatientCard
             clinicId={clinic?.id}
