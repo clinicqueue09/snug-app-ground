@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Stethoscope } from "lucide-react";
+import { Stethoscope, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
@@ -20,6 +20,23 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+function PasswordInput({ id, value, onChange, ...rest }: React.ComponentProps<typeof Input>) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Input id={id} type={show ? "text" : "password"} value={value} onChange={onChange} {...rest} className={cn("pr-10", rest.className)} />
+      <button
+        type="button"
+        onClick={() => setShow((v) => !v)}
+        aria-label={show ? "Hide password" : "Show password"}
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+      >
+        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+}
+
 function AuthPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -27,15 +44,11 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Sign-up-only fields
   const [clinicName, setClinicName] = useState("");
   const [clinicAddress, setClinicAddress] = useState("");
   const [clinicMobile, setClinicMobile] = useState("");
-  const [avgTime, setAvgTime] = useState("10");
   const [touched, setTouched] = useState(false);
-
   const mobileValid = clinicMobile === "" || /^[0-9]{10}$/.test(clinicMobile);
-  const avgValid = /^[1-9][0-9]?$|^1[0-9]{2}$|^2[0-3][0-9]$|^240$/.test(avgTime);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -57,26 +70,23 @@ function AuthPage() {
     e.preventDefault();
     setTouched(true);
     if (!clinicName.trim()) return toast.error("Clinic name is required.");
-    if (!clinicAddress.trim()) return toast.error("Clinic address is required.");
+    if (!clinicAddress.trim()) return toast.error("Full Clinic Address / Google Map Link is required.");
     if (!mobileValid) return toast.error("Clinic mobile must be exactly 10 digits.");
-    if (!avgValid) return toast.error("Average time must be between 1 and 240 minutes.");
     setLoading(true);
     const { error } = await supabase.auth.signUp({
-      email,
-      password,
+      email, password,
       options: {
         emailRedirectTo: `${window.location.origin}/dashboard`,
         data: {
           clinic_name: clinicName.trim(),
           clinic_address: clinicAddress.trim(),
           clinic_mobile: clinicMobile.trim() || null,
-          avg_time_per_patient: parseInt(avgTime, 10),
         },
       },
     });
     setLoading(false);
     if (error) return toast.error(error.message);
-    toast.success("Account created. You can sign in now.");
+    toast.success("Account created, verify your email");
   };
 
   return (
@@ -86,7 +96,7 @@ function AuthPage() {
           <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
             <Stethoscope className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Clinic Queue</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">ClinicQ</h1>
           <p className="text-sm text-muted-foreground">Receptionist workspace</p>
         </div>
         <Card>
@@ -109,7 +119,7 @@ function AuthPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="si-password">Password</Label>
-                    <Input id="si-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+                    <PasswordInput id="si-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Signing in..." : "Sign in"}
@@ -127,32 +137,19 @@ function AuthPage() {
                     <Input id="su-cname" required value={clinicName} onChange={(e) => setClinicName(e.target.value)} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="su-caddr">Clinic Address <span className="text-rose-500">*</span></Label>
-                    <Input id="su-caddr" required value={clinicAddress} onChange={(e) => setClinicAddress(e.target.value)} />
+                    <Label htmlFor="su-caddr">Full Clinic Address / Google Map Link <span className="text-rose-500">*</span></Label>
+                    <Input id="su-caddr" required value={clinicAddress} onChange={(e) => setClinicAddress(e.target.value)} placeholder="123 Main St, City / https://maps.google.com/…" />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="su-cmob">Clinic Mobile</Label>
-                      <Input
-                        id="su-cmob"
-                        inputMode="numeric"
-                        value={clinicMobile}
-                        onChange={(e) => setClinicMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                        placeholder="10 digits (optional)"
-                        className={cn(touched && !mobileValid && "border-rose-400")}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="su-avg">Avg time / patient (min) <span className="text-rose-500">*</span></Label>
-                      <Input
-                        id="su-avg"
-                        inputMode="numeric"
-                        required
-                        value={avgTime}
-                        onChange={(e) => setAvgTime(e.target.value.replace(/\D/g, "").slice(0, 3))}
-                        className={cn(touched && !avgValid && "border-rose-400")}
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="su-cmob">Clinic Mobile (optional)</Label>
+                    <Input
+                      id="su-cmob"
+                      inputMode="numeric"
+                      value={clinicMobile}
+                      onChange={(e) => setClinicMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      placeholder="10 digits"
+                      className={cn(touched && !mobileValid && "border-rose-400")}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="su-email">Email</Label>
@@ -160,7 +157,7 @@ function AuthPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="su-password">Password</Label>
-                    <Input id="su-password" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
+                    <PasswordInput id="su-password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Creating..." : "Create account"}
