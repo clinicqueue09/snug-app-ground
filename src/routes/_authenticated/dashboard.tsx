@@ -9,7 +9,7 @@ import {
   applyDoctorShiftStatus,
 } from "@/lib/whatsapp.functions";
 import { submitFeedback } from "@/lib/feedback.functions";
-import { pricingLabel } from "@/lib/pricing";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,7 +27,7 @@ import { toast } from "sonner";
 import {
   LogOut, Stethoscope, Clock, CheckCircle2, PlayCircle, XCircle, UserPlus, AlertTriangle,
   Sparkles, CalendarIcon, Bell, CalendarClock, Settings, Pencil, DoorOpen, MessageCircle,
-  Shield, IndianRupee, Timer,
+  Shield, Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -173,7 +173,6 @@ function Dashboard() {
   const upcomingTokens = sortAndTokenize(upcomingAll);
 
   const unreadNotifs = notifs.filter((n) => !n.read_at).length;
-  const monthlyFeeLabel = pricingLabel(doctors.length);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -204,9 +203,6 @@ function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border bg-emerald-50 text-emerald-700 border-emerald-200">
-              <IndianRupee className="h-3 w-3" /> {monthlyFeeLabel}
-            </span>
             <NotificationsBell notifs={notifs} unread={unreadNotifs} onRead={loadAll} />
             <ClinicProfileDialog clinic={clinic} onSaved={loadAll} />
             <ManageDoctorsDialog doctors={doctors} clinicId={clinic?.id} onChange={loadAll} />
