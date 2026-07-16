@@ -81,11 +81,11 @@ function ResetPasswordPage() {
               <form onSubmit={submit} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="np">New password</Label>
-                  <Input id="np" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
+                  <PasswordInput id="np" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="np2">Confirm password</Label>
-                  <Input id="np2" type="password" required minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+                  <PasswordInput id="np2" required minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Updating..." : "Update password"}
