@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-const DISCLAIMER = "Note: The appointment time provided is tentative and subject to change based on the live movement of the clinic queue.";
+const DISCLAIMER = "Note: All stated times are tentative appointment times and may shift with live queue movement.";
 const MAX_TOTAL_MESSAGES = 7;
 
 function fmtTime12(value: string | null | undefined): string {
@@ -11,12 +11,10 @@ function fmtTime12(value: string | null | undefined): string {
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   return `${h12}:${m} ${mer}`;
 }
-
 function doctorLabel(name: string, specialty: string | null | undefined) {
   const spec = (specialty ?? "").trim();
   return spec ? `Dr. ${name} (${spec})` : `Dr. ${name}`;
 }
-
 function combineDT(dateISO: string, time: string | null): Date | null {
   if (!time || !/^\d{1,2}:\d{2}$/.test(time)) return null;
   const [h, m] = time.split(":").map((n) => parseInt(n, 10));
@@ -24,7 +22,6 @@ function combineDT(dateISO: string, time: string | null): Date | null {
   d.setHours(h, m, 0, 0);
   return d;
 }
-
 async function postToTunnel(tunnelUrl: string, phone10: string, message: string) {
   try {
     const endpoint = tunnelUrl.replace(/\/+$/, "") + "/send-message";
@@ -34,9 +31,7 @@ async function postToTunnel(tunnelUrl: string, phone10: string, message: string)
       body: JSON.stringify({ phone: `91${phone10}`, message }),
     });
     return res.ok;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
 export const Route = createFileRoute("/api/public/hooks/whatsapp-reminders")({
@@ -44,6 +39,11 @@ export const Route = createFileRoute("/api/public/hooks/whatsapp-reminders")({
     handlers: {
       POST: async () => {
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+        // Global tunnel URL
+        const { data: appSettings } = await supabaseAdmin.from("app_settings").select("whatsapp_tunnel_url").eq("id", "global").maybeSingle();
+        const tunnelUrl = ((appSettings as any)?.whatsapp_tunnel_url ?? "").trim();
+        if (!tunnelUrl) return new Response(JSON.stringify({ ok: true, sent: 0, note: "gateway not configured" }), { headers: { "Content-Type": "application/json" } });
 
         const now = Date.now();
         const windowStart = new Date(now + (24 * 60 - 15) * 60_000);
@@ -64,16 +64,14 @@ export const Route = createFileRoute("/api/public/hooks/whatsapp-reminders")({
         const clinicIds = Array.from(new Set(tokens.map((t: any) => t.clinic_id)));
         const doctorIds = Array.from(new Set(tokens.map((t: any) => t.doctor_id).filter(Boolean)));
 
-        const [clinicsRes, doctorsRes, settingsRes] = await Promise.all([
+        const [clinicsRes, doctorsRes] = await Promise.all([
           supabaseAdmin.from("clinics").select("id, name, address, clinic_mobile").in("id", clinicIds),
           doctorIds.length
             ? supabaseAdmin.from("doctors").select("id, name, specialty").in("id", doctorIds)
             : Promise.resolve({ data: [] as any[], error: null }),
-          supabaseAdmin.from("clinic_settings").select("clinic_id, tunnel_url").in("clinic_id", clinicIds),
         ]);
         const clinicMap = new Map((clinicsRes.data ?? []).map((c: any) => [c.id, c]));
         const doctorMap = new Map((doctorsRes.data ?? []).map((d: any) => [d.id, d]));
-        const tunnelMap = new Map((settingsRes.data ?? []).map((s: any) => [s.clinic_id, s.tunnel_url]));
 
         let sent = 0;
         for (const raw of tokens) {
@@ -85,13 +83,12 @@ export const Route = createFileRoute("/api/public/hooks/whatsapp-reminders")({
 
           const clinic = clinicMap.get(t.clinic_id) as any;
           const doctor = t.doctor_id ? (doctorMap.get(t.doctor_id) as any) : null;
-          const tunnelUrl = (tunnelMap.get(t.clinic_id) as string | undefined)?.trim();
-          if (!clinic || !tunnelUrl) continue;
+          if (!clinic) continue;
 
           const contact = clinic.clinic_mobile ? ` Contact: ${clinic.clinic_mobile}.` : "";
           const doc = doctorLabel(doctor?.name ?? "your doctor", doctor?.specialty ?? null);
           const timeStr = fmtTime12(t.appointment_time);
-          const message = `Hello ${t.patient_name}, reminder: your appointment at ${clinic.name} with ${doc} is tomorrow, ${t.appointment_date}${timeStr ? ` at ${timeStr}` : ""}. Your Token is #${t.token_number}. Location: ${clinic.address}.${contact}\n\n${DISCLAIMER}`;
+          const message = `Hello ${t.patient_name}, reminder — your appointment at ${clinic.name} with ${doc} is tomorrow.\nDate: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}\nYour latest token: #${t.token_number}.\nFull Clinic Address / Google Map Link: ${clinic.address}.${contact}\n\n${DISCLAIMER}`;
 
           const ok = await postToTunnel(tunnelUrl, t.phone_number, message);
           if (!ok) continue;
