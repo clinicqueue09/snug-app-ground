@@ -17,7 +17,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -25,9 +31,24 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import {
-  LogOut, Stethoscope, Clock, CheckCircle2, PlayCircle, XCircle, UserPlus, AlertTriangle,
-  Sparkles, CalendarIcon, Bell, CalendarClock, Settings, Pencil, DoorOpen, MessageCircle,
-  Shield, Timer,
+  LogOut,
+  Stethoscope,
+  Clock,
+  CheckCircle2,
+  PlayCircle,
+  XCircle,
+  UserPlus,
+  AlertTriangle,
+  Sparkles,
+  CalendarIcon,
+  Bell,
+  CalendarClock,
+  Settings,
+  Pencil,
+  DoorOpen,
+  MessageCircle,
+  Shield,
+  Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -38,8 +59,13 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 type Clinic = {
-  id: string; name: string; status: string; trial_ends_at: string;
-  address: string; clinic_mobile: string | null; avg_time_per_patient: number;
+  id: string;
+  name: string;
+  status: string;
+  trial_ends_at: string;
+  address: string;
+  clinic_mobile: string | null;
+  avg_time_per_patient: number;
 };
 type Doctor = { id: string; name: string; specialty: string | null; avg_time_per_patient: number | null };
 type Token = {
@@ -56,13 +82,26 @@ type Token = {
   doctor_arrived_sent_at?: string | null;
 };
 type PlatformNotification = {
-  id: string; kind: string; title: string; body: string; read_at: string | null; created_at: string;
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
 };
 
 const statusMeta: Record<Token["status"], { label: string; className: string; icon: React.ElementType }> = {
   waiting: { label: "Waiting", className: "bg-sky-100 text-sky-700 border-sky-200", icon: Clock },
-  in_consultation: { label: "In Consultation", className: "bg-blue-100 text-blue-700 border-blue-200", icon: PlayCircle },
-  completed: { label: "Completed", className: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
+  in_consultation: {
+    label: "In Consultation",
+    className: "bg-blue-100 text-blue-700 border-blue-200",
+    icon: PlayCircle,
+  },
+  completed: {
+    label: "Completed",
+    className: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    icon: CheckCircle2,
+  },
   no_show: { label: "No Show", className: "bg-rose-100 text-rose-700 border-rose-200", icon: XCircle },
   cancelled: { label: "Cancelled", className: "bg-slate-100 text-slate-500 border-slate-200", icon: XCircle },
 };
@@ -106,10 +145,22 @@ function Dashboard() {
 
   const loadAll = async () => {
     const [c, d, t, n] = await Promise.all([
-      supabase.from("clinics").select("id,name,status,trial_ends_at,address,clinic_mobile,avg_time_per_patient").limit(1).maybeSingle(),
+      supabase
+        .from("clinics")
+        .select("id,name,status,trial_ends_at,address,clinic_mobile,avg_time_per_patient")
+        .limit(1)
+        .maybeSingle(),
       supabase.from("doctors").select("id,name,specialty,avg_time_per_patient").eq("is_active", true).order("name"),
-      supabase.from("tokens").select("*").order("appointment_date").order("appointment_time", { ascending: true, nullsFirst: false }),
-      supabase.from("platform_notifications").select("id,kind,title,body,read_at,created_at").order("created_at", { ascending: false }).limit(20),
+      supabase
+        .from("tokens")
+        .select("*")
+        .order("appointment_date")
+        .order("appointment_time", { ascending: true, nullsFirst: false }),
+      supabase
+        .from("platform_notifications")
+        .select("id,kind,title,body,read_at,created_at")
+        .order("created_at", { ascending: false })
+        .limit(20),
     ]);
     if (c.data) setClinic(c.data as Clinic);
     if (d.data) setDoctors(d.data as Doctor[]);
@@ -134,7 +185,9 @@ function Dashboard() {
       .on("postgres_changes", { event: "*", schema: "public", table: "doctors" }, loadAll)
       .on("postgres_changes", { event: "*", schema: "public", table: "platform_notifications" }, loadAll)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleSignOut = async () => {
@@ -147,11 +200,15 @@ function Dashboard() {
       const res = await advanceQueue({ data: { doctorId: t.doctor_id, appointmentDate: t.appointment_date } });
       if (res.ok && res.queued && res.queued.length > 0) {
         for (const q of res.queued) {
-          const r = await sendWhatsApp({ data: { tokenId: q.tokenId, variant: q.variant, tentativeTime: q.tentativeTime } });
+          const r = await sendWhatsApp({
+            data: { tokenId: q.tokenId, variant: q.variant, tentativeTime: q.tentativeTime },
+          });
           if (!r.ok && r.error) console.warn("[whatsapp]", r.error);
         }
       }
-    } catch (e) { console.warn("advanceQueue failed", e); }
+    } catch (e) {
+      console.warn("advanceQueue failed", e);
+    }
   };
 
   const updateStatus = async (t: Token, status: Token["status"]) => {
@@ -161,8 +218,12 @@ function Dashboard() {
     if (status === "completed" || status === "no_show" || status === "in_consultation") runAdvance(t);
   };
 
-  const trialDaysLeft = clinic ? Math.ceil((new Date(clinic.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
-  const trialExpired = clinic ? new Date(clinic.trial_ends_at).getTime() < Date.now() && clinic.status !== "active" : false;
+  const trialDaysLeft = clinic
+    ? Math.ceil((new Date(clinic.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const trialExpired = clinic
+    ? new Date(clinic.trial_ends_at).getTime() < Date.now() && clinic.status !== "active"
+    : false;
   const showTrialBanner = clinic?.status === "trial" && !trialExpired;
 
   const today = todayISO();
@@ -185,7 +246,9 @@ function Dashboard() {
       {showTrialBanner && (
         <div className="bg-sky-50 border-b border-sky-100 text-sky-900 px-6 py-2.5 flex items-center justify-center gap-2 text-sm">
           <Sparkles className="h-4 w-4 text-sky-600" />
-          <span className="font-medium">{trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left</span>
+          <span className="font-medium">
+            {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left
+          </span>
           <span className="text-sky-700">in your 21-day free trial</span>
         </div>
       )}
@@ -197,7 +260,9 @@ function Dashboard() {
               <Stethoscope className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <div className="font-semibold text-slate-900 leading-tight truncate">{clinic?.name ?? "Clinic Queue"}</div>
+              <div className="font-semibold text-slate-900 leading-tight truncate">
+                {clinic?.name ?? "Clinic Queue"}
+              </div>
               {clinic?.address && <div className="text-sm text-slate-600 truncate">{clinic.address}</div>}
               <div className="text-xs text-slate-500 truncate">{email}</div>
             </div>
@@ -207,11 +272,20 @@ function Dashboard() {
             <ClinicProfileDialog clinic={clinic} onSaved={loadAll} />
             <ManageDoctorsDialog doctors={doctors} clinicId={clinic?.id} onChange={loadAll} />
             {isAdmin && (
-              <Link to="/admin/whatsapp" className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 px-3 py-1.5 text-xs font-medium">
+              <Link
+                to="/admin/whatsapp"
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 px-3 py-1.5 text-xs font-medium"
+              >
                 <Shield className="h-3.5 w-3.5" /> Admin
               </Link>
             )}
-            <Button variant="ghost" size="icon" onClick={handleSignOut} aria-label="Sign out" className="text-slate-500 hover:text-slate-900">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleSignOut}
+              aria-label="Sign out"
+              className="text-slate-500 hover:text-slate-900"
+            >
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -237,9 +311,11 @@ function Dashboard() {
           onApply={async (doctorId, status, minutes) => {
             const res = await applyShift({ data: { doctorId, status, delayMinutes: minutes } });
             if (res.ok) {
-              toast.success(status === "delayed"
-                ? `Delay applied. ${res.shifted} slots shifted, ${res.sent} patients notified.`
-                : `Doctor confirmed on time. ${res.sent} patients notified.`);
+              toast.success(
+                status === "delayed"
+                  ? `Delay applied. ${res.shifted} slots shifted, ${res.sent} patients notified.`
+                  : `Doctor confirmed on time. ${res.sent} patients notified.`,
+              );
               loadAll();
             } else {
               toast.error(res.error ?? "Shift update failed");
@@ -266,27 +342,49 @@ function Dashboard() {
         <section className="lg:col-span-2 space-y-4">
           <Tabs defaultValue="today">
             <TabsList>
-              <TabsTrigger value="today" className="gap-1.5"><Clock className="h-3.5 w-3.5" />Today's Queue</TabsTrigger>
-              <TabsTrigger value="upcoming" className="gap-1.5"><CalendarClock className="h-3.5 w-3.5" />Upcoming</TabsTrigger>
+              <TabsTrigger value="today" className="gap-1.5">
+                <Clock className="h-3.5 w-3.5" />
+                Today's Queue
+              </TabsTrigger>
+              <TabsTrigger value="upcoming" className="gap-1.5">
+                <CalendarClock className="h-3.5 w-3.5" />
+                Upcoming
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="today" className="space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Today's Queue</h2>
-                  <p className="text-sm text-slate-500 mt-0.5">{todayTokens.length} {todayTokens.length === 1 ? "patient" : "patients"}</p>
+                  <p className="text-sm text-slate-500 mt-0.5">
+                    {todayTokens.length} {todayTokens.length === 1 ? "patient" : "patients"}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => setDoctorFilter("all")}
-                    className={cn("px-3 py-1.5 rounded-full text-xs font-medium border", doctorFilter === "all" ? "bg-sky-600 text-white border-sky-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
-                  >All</button>
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-xs font-medium border",
+                      doctorFilter === "all"
+                        ? "bg-sky-600 text-white border-sky-600"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50",
+                    )}
+                  >
+                    All
+                  </button>
                   {doctors.map((d) => (
                     <button
                       key={d.id}
                       onClick={() => setDoctorFilter(d.id)}
-                      className={cn("px-3 py-1.5 rounded-full text-xs font-medium border", doctorFilter === d.id ? "bg-sky-600 text-white border-sky-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
-                    >{d.name}</button>
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-xs font-medium border",
+                        doctorFilter === d.id
+                          ? "bg-sky-600 text-white border-sky-600"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50",
+                      )}
+                    >
+                      {d.name}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -320,16 +418,26 @@ function Dashboard() {
         </section>
       </main>
 
-      <FeedbackTray onSubmit={async (message) => {
-        const res = await feedbackFn({ data: { message } });
-        if (res.ok) toast.success("Thanks for the feedback");
-        else toast.error(res.error ?? "Failed to submit");
-      }} />
+      <FeedbackTray
+        onSubmit={async (message) => {
+          const res = await feedbackFn({ data: { message } });
+          if (res.ok) toast.success("Thanks for the feedback");
+          else toast.error(res.error ?? "Failed to submit");
+        }}
+      />
     </div>
   );
 }
 
-function NotificationsBell({ notifs, unread, onRead }: { notifs: PlatformNotification[]; unread: number; onRead: () => void }) {
+function NotificationsBell({
+  notifs,
+  unread,
+  onRead,
+}: {
+  notifs: PlatformNotification[];
+  unread: number;
+  onRead: () => void;
+}) {
   const markAllRead = async () => {
     const unreadIds = notifs.filter((n) => !n.read_at).map((n) => n.id);
     if (unreadIds.length === 0) return;
@@ -351,7 +459,9 @@ function NotificationsBell({ notifs, unread, onRead }: { notifs: PlatformNotific
       <PopoverContent align="end" className="w-80 p-0">
         <div className="flex items-center justify-between px-3 py-2 border-b">
           <div className="text-sm font-semibold">Notifications</div>
-          <button className="text-xs text-sky-600 hover:underline" onClick={markAllRead}>Mark all read</button>
+          <button className="text-xs text-sky-600 hover:underline" onClick={markAllRead}>
+            Mark all read
+          </button>
         </div>
         <div className="max-h-80 overflow-auto divide-y">
           {notifs.length === 0 && <div className="p-6 text-center text-sm text-slate-500">No notifications yet.</div>}
@@ -369,7 +479,13 @@ function NotificationsBell({ notifs, unread, onRead }: { notifs: PlatformNotific
 }
 
 function QueueTable({
-  tokens, loading, doctorMap, onUpdate, onEdited, emptyText, showDate,
+  tokens,
+  loading,
+  doctorMap,
+  onUpdate,
+  onEdited,
+  emptyText,
+  showDate,
 }: {
   tokens: Array<Token & { displayToken: number }>;
   loading: boolean;
@@ -397,19 +513,29 @@ function QueueTable({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400">Loading…</td></tr>
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                  Loading…
+                </td>
+              </tr>
             ) : tokens.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400">{emptyText}</td></tr>
-            ) : tokens.map((t) => (
-              <TokenRow
-                key={t.id}
-                token={t}
-                doctor={t.doctor_id ? doctorMap.get(t.doctor_id) : undefined}
-                onUpdate={onUpdate}
-                onEdited={onEdited}
-                showDate={showDate}
-              />
-            ))}
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                  {emptyText}
+                </td>
+              </tr>
+            ) : (
+              tokens.map((t) => (
+                <TokenRow
+                  key={t.id}
+                  token={t}
+                  doctor={t.doctor_id ? doctorMap.get(t.doctor_id) : undefined}
+                  onUpdate={onUpdate}
+                  onEdited={onEdited}
+                  showDate={showDate}
+                />
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -418,7 +544,11 @@ function QueueTable({
 }
 
 function TokenRow({
-  token, doctor, onUpdate, onEdited, showDate,
+  token,
+  doctor,
+  onUpdate,
+  onEdited,
+  showDate,
 }: {
   token: Token & { displayToken: number };
   doctor?: Doctor;
@@ -454,13 +584,34 @@ function TokenRow({
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-1 flex-wrap">
           {token.status === "waiting" && (
-            <Button size="sm" variant="ghost" className="text-blue-700 hover:bg-blue-50" onClick={() => onUpdate(token, "in_consultation")}>Start</Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-blue-700 hover:bg-blue-50"
+              onClick={() => onUpdate(token, "in_consultation")}
+            >
+              Start
+            </Button>
           )}
           {token.status === "in_consultation" && (
-            <Button size="sm" variant="ghost" className="text-emerald-700 hover:bg-emerald-50" onClick={() => onUpdate(token, "completed")}>Complete</Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-emerald-700 hover:bg-emerald-50"
+              onClick={() => onUpdate(token, "completed")}
+            >
+              Complete
+            </Button>
           )}
           {(token.status === "waiting" || token.status === "in_consultation") && (
-            <Button size="sm" variant="ghost" className="text-rose-700 hover:bg-rose-50" onClick={() => onUpdate(token, "no_show")}>No Show</Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-rose-700 hover:bg-rose-50"
+              onClick={() => onUpdate(token, "no_show")}
+            >
+              No Show
+            </Button>
           )}
           <RescheduleDialog token={token} onSaved={onEdited} />
         </div>
@@ -472,7 +623,9 @@ function TokenRow({
 function InlineNameEdit({ token, onSaved }: { token: Token; onSaved: () => void }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(token.patient_name);
-  useEffect(() => { setValue(token.patient_name); }, [token.patient_name]);
+  useEffect(() => {
+    setValue(token.patient_name);
+  }, [token.patient_name]);
 
   const save = async () => {
     const v = value.trim();
@@ -480,12 +633,18 @@ function InlineNameEdit({ token, onSaved }: { token: Token; onSaved: () => void 
     if (!v || v === token.patient_name) return;
     const { error } = await supabase.from("tokens").update({ patient_name: v }).eq("id", token.id);
     if (error) toast.error(error.message);
-    else { toast.success("Name updated"); onSaved(); }
+    else {
+      toast.success("Name updated");
+      onSaved();
+    }
   };
 
   if (!editing) {
     return (
-      <button onClick={() => setEditing(true)} className="text-left font-medium text-slate-900 hover:text-sky-700 inline-flex items-center gap-1 group">
+      <button
+        onClick={() => setEditing(true)}
+        className="text-left font-medium text-slate-900 hover:text-sky-700 inline-flex items-center gap-1 group"
+      >
         {token.patient_name}
         <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60" />
       </button>
@@ -497,7 +656,10 @@ function InlineNameEdit({ token, onSaved }: { token: Token; onSaved: () => void 
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onBlur={save}
-      onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") save();
+        if (e.key === "Escape") setEditing(false);
+      }}
       className="h-8 text-sm"
     />
   );
@@ -512,7 +674,9 @@ function InlineTimeEdit({ token, onSaved }: { token: Token; onSaved: () => void 
 
   useEffect(() => {
     const p = parse24h(token.appointment_time);
-    setHour(p.hour); setMinute(p.minute); setMeridiem(p.meridiem);
+    setHour(p.hour);
+    setMinute(p.minute);
+    setMeridiem(p.meridiem);
   }, [token.appointment_time]);
 
   const save = async () => {
@@ -524,7 +688,10 @@ function InlineTimeEdit({ token, onSaved }: { token: Token; onSaved: () => void 
       if ((error as any).code === "23505" || /duplicate|unique/i.test(error.message)) {
         toast.error("This slot is already booked for this doctor.");
       } else toast.error(error.message);
-    } else { toast.success("Time updated"); onSaved(); }
+    } else {
+      toast.success("Time updated");
+      onSaved();
+    }
   };
 
   return (
@@ -533,10 +700,23 @@ function InlineTimeEdit({ token, onSaved }: { token: Token; onSaved: () => void 
         <button className="text-slate-700 hover:text-sky-700 text-sm">{formatDisplay(token.appointment_time)}</button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-3" align="start">
-        <TimeSelect hour={hour} minute={minute} meridiem={meridiem} onChange={(v) => { setHour(v.hour); setMinute(v.minute); setMeridiem(v.meridiem); }} />
+        <TimeSelect
+          hour={hour}
+          minute={minute}
+          meridiem={meridiem}
+          onChange={(v) => {
+            setHour(v.hour);
+            setMinute(v.minute);
+            setMeridiem(v.meridiem);
+          }}
+        />
         <div className="flex justify-end gap-2 mt-3">
-          <Button size="sm" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button size="sm" className="bg-sky-600 hover:bg-sky-700" onClick={save}>Save</Button>
+          <Button size="sm" variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button size="sm" className="bg-sky-600 hover:bg-sky-700" onClick={save}>
+            Save
+          </Button>
         </div>
       </PopoverContent>
     </Popover>
@@ -545,7 +725,9 @@ function InlineTimeEdit({ token, onSaved }: { token: Token; onSaved: () => void 
 
 function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
-  const [date, setDate] = useState<Date | undefined>(token.appointment_date ? new Date(token.appointment_date + "T00:00:00") : new Date());
+  const [date, setDate] = useState<Date | undefined>(
+    token.appointment_date ? new Date(token.appointment_date + "T00:00:00") : new Date(),
+  );
   const initial = parse24h(token.appointment_time);
   const [hour, setHour] = useState(initial.hour);
   const [minute, setMinute] = useState(initial.minute);
@@ -555,10 +737,13 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
   const save = async () => {
     if (!date) return toast.error("Pick a date");
     setSaving(true);
-    const { error } = await supabase.from("tokens").update({
-      appointment_date: format(date, "yyyy-MM-dd"),
-      appointment_time: to24h(hour, minute, meridiem),
-    }).eq("id", token.id);
+    const { error } = await supabase
+      .from("tokens")
+      .update({
+        appointment_date: format(date, "yyyy-MM-dd"),
+        appointment_time: to24h(hour, minute, meridiem),
+      })
+      .eq("id", token.id);
     setSaving(false);
     if (error) {
       if ((error as any).code === "23505" || /duplicate|unique/i.test(error.message)) {
@@ -575,7 +760,8 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="ghost" className="text-slate-600 hover:bg-slate-100">
-          <CalendarClock className="h-3.5 w-3.5 mr-1" />Reschedule
+          <CalendarClock className="h-3.5 w-3.5 mr-1" />
+          Reschedule
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -587,32 +773,61 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
             <Label className="text-xs font-medium text-slate-700">Appointment Date</Label>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                <Button
+                  variant="outline"
+                  className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}
+                >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {date ? format(date, "PPP") : "Pick a date"}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
-                <Calendar mode="single" selected={date} onSelect={setDate} initialFocus className={cn("p-3 pointer-events-auto")} />
+                <Calendar
+                  mode="single"
+                  selected={date}
+                  onSelect={setDate}
+                  initialFocus
+                  className={cn("p-3 pointer-events-auto")}
+                />
               </PopoverContent>
             </Popover>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-slate-700">Appointment Time</Label>
-            <TimeSelect hour={hour} minute={minute} meridiem={meridiem} onChange={(v) => { setHour(v.hour); setMinute(v.minute); setMeridiem(v.meridiem); }} />
+            <TimeSelect
+              hour={hour}
+              minute={minute}
+              meridiem={meridiem}
+              onChange={(v) => {
+                setHour(v.hour);
+                setMinute(v.minute);
+                setMeridiem(v.meridiem);
+              }}
+            />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={save} disabled={saving} className="bg-sky-600 hover:bg-sky-700">{saving ? "Saving..." : "Save"}</Button>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={saving} className="bg-sky-600 hover:bg-sky-700">
+            {saving ? "Saving..." : "Save"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function AddPatientCard({ clinicId, doctors, disabled, onAdded }: {
-  clinicId?: string; doctors: Doctor[]; disabled: boolean;
+function AddPatientCard({
+  clinicId,
+  doctors,
+  disabled,
+  onAdded,
+}: {
+  clinicId?: string;
+  doctors: Doctor[];
+  disabled: boolean;
   onAdded: (t: Token) => void;
 }) {
   const [name, setName] = useState("");
@@ -637,15 +852,19 @@ function AddPatientCard({ clinicId, doctors, disabled, onAdded }: {
     if (!date) return toast.error("Pick an appointment date");
     if (!hour || !minute) return toast.error("Pick an appointment time");
     setSaving(true);
-    const { data, error } = await supabase.from("tokens").insert({
-      clinic_id: clinicId,
-      patient_name: name.trim(),
-      phone_number: phone,
-      doctor_id: doctorId,
-      token_number: 0,
-      appointment_date: format(date, "yyyy-MM-dd"),
-      appointment_time: to24h(hour, minute, meridiem),
-    }).select("*").single();
+    const { data, error } = await supabase
+      .from("tokens")
+      .insert({
+        clinic_id: clinicId,
+        patient_name: name.trim(),
+        phone_number: phone,
+        doctor_id: doctorId,
+        token_number: 0,
+        appointment_date: format(date, "yyyy-MM-dd"),
+        appointment_time: to24h(hour, minute, meridiem),
+      })
+      .select("*")
+      .single();
     setSaving(false);
     if (error) {
       if ((error as any).code === "23505" || /duplicate|unique/i.test(error.message)) {
@@ -654,7 +873,14 @@ function AddPatientCard({ clinicId, doctors, disabled, onAdded }: {
       return toast.error(error.message);
     }
     toast.success("Patient added");
-    setName(""); setPhone(""); setDoctorId(""); setHour(""); setMinute(""); setMeridiem("AM"); setDate(new Date()); setTouched(false);
+    setName("");
+    setPhone("");
+    setDoctorId("");
+    setHour("");
+    setMinute("");
+    setMeridiem("AM");
+    setDate(new Date());
+    setTouched(false);
     onAdded(data as Token);
   };
 
@@ -667,18 +893,30 @@ function AddPatientCard({ clinicId, doctors, disabled, onAdded }: {
           </div>
           <div>
             <CardTitle className="text-base text-slate-900">Add Patient</CardTitle>
-            <CardDescription className="text-xs">Insert between existing slots — tokens re-number automatically.</CardDescription>
+            <CardDescription className="text-xs">
+              Insert between existing slots — tokens re-number automatically.
+            </CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <fieldset disabled={disabled} className="space-y-4 disabled:opacity-50">
           <div className="space-y-1.5">
-            <Label htmlFor="pname" className="text-xs font-medium text-slate-700">Patient Name <span className="text-rose-500">*</span></Label>
-            <Input id="pname" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className="border-slate-200" />
+            <Label htmlFor="pname" className="text-xs font-medium text-slate-700">
+              Patient Name <span className="text-rose-500">*</span>
+            </Label>
+            <Input
+              id="pname"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Jane Doe"
+              className="border-slate-200"
+            />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="phone" className="text-xs font-medium text-slate-700">Phone Number <span className="text-rose-500">*</span></Label>
+            <Label htmlFor="phone" className="text-xs font-medium text-slate-700">
+              Phone Number <span className="text-rose-500">*</span>
+            </Label>
             <Input
               id="phone"
               value={phone}
@@ -691,13 +929,20 @@ function AddPatientCard({ clinicId, doctors, disabled, onAdded }: {
             {phoneError && <p className="text-xs text-rose-600">Enter exactly 10 digits.</p>}
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-700">Doctor <span className="text-rose-500">*</span></Label>
+            <Label className="text-xs font-medium text-slate-700">
+              Doctor <span className="text-rose-500">*</span>
+            </Label>
             <Select value={doctorId} onValueChange={setDoctorId}>
-              <SelectTrigger className="border-slate-200"><SelectValue placeholder="Select a doctor" /></SelectTrigger>
+              <SelectTrigger className="border-slate-200">
+                <SelectValue placeholder="Select a doctor" />
+              </SelectTrigger>
               <SelectContent>
                 {doctors.length === 0 && <div className="px-2 py-1.5 text-sm text-slate-500">No doctors yet</div>}
                 {doctors.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>{d.name}{d.specialty ? ` · ${d.specialty}` : ""}</SelectItem>
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
+                    {d.specialty ? ` · ${d.specialty}` : ""}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -706,7 +951,13 @@ function AddPatientCard({ clinicId, doctors, disabled, onAdded }: {
             <Label className="text-xs font-medium text-slate-700">Date</Label>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" className={cn("w-full justify-start text-left font-normal border-slate-200", !date && "text-muted-foreground")}>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal border-slate-200",
+                    !date && "text-muted-foreground",
+                  )}
+                >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {date ? format(date, "MMM d, yyyy") : "Pick a date"}
                 </Button>
@@ -716,7 +967,11 @@ function AddPatientCard({ clinicId, doctors, disabled, onAdded }: {
                   mode="single"
                   selected={date}
                   onSelect={setDate}
-                  disabled={(d) => { const today = new Date(); today.setHours(0, 0, 0, 0); return d < today; }}
+                  disabled={(d) => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    return d < today;
+                  }}
                   initialFocus
                   className={cn("p-3 pointer-events-auto")}
                 />
@@ -725,13 +980,24 @@ function AddPatientCard({ clinicId, doctors, disabled, onAdded }: {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-slate-700">Time</Label>
-            <TimeSelect hour={hour} minute={minute} meridiem={meridiem} onChange={(v) => { setHour(v.hour); setMinute(v.minute); setMeridiem(v.meridiem); }} />
+            <TimeSelect
+              hour={hour}
+              minute={minute}
+              meridiem={meridiem}
+              onChange={(v) => {
+                setHour(v.hour);
+                setMinute(v.minute);
+                setMeridiem(v.meridiem);
+              }}
+            />
           </div>
           <Button onClick={submit} disabled={saving || disabled} className="w-full bg-sky-600 hover:bg-sky-700">
             {saving ? "Adding..." : "Add to Queue"}
           </Button>
         </fieldset>
-        {disabled && <p className="text-xs text-rose-600 text-center">Adding patients is disabled while the trial is expired.</p>}
+        {disabled && (
+          <p className="text-xs text-rose-600 text-center">Adding patients is disabled while the trial is expired.</p>
+        )}
       </CardContent>
     </Card>
   );
@@ -747,8 +1013,10 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
 
   useEffect(() => {
     if (open && clinic) {
-      setName(clinic.name); setAddress(clinic.address);
-      setMobile(clinic.clinic_mobile ?? ""); setAvg(String(clinic.avg_time_per_patient));
+      setName(clinic.name);
+      setAddress(clinic.address);
+      setMobile(clinic.clinic_mobile ?? "");
+      setAvg(String(clinic.avg_time_per_patient));
     }
   }, [open, clinic]);
 
@@ -759,10 +1027,15 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
     const avgN = parseInt(avg, 10);
     if (!Number.isFinite(avgN) || avgN < 1 || avgN > 240) return toast.error("Avg time must be 1–240 minutes.");
     setSaving(true);
-    const { error } = await supabase.from("clinics").update({
-      name: name.trim(), address: address.trim(),
-      clinic_mobile: mobile.trim() || null, avg_time_per_patient: avgN,
-    }).eq("id", clinic.id);
+    const { error } = await supabase
+      .from("clinics")
+      .update({
+        name: name.trim(),
+        address: address.trim(),
+        clinic_mobile: mobile.trim() || null,
+        avg_time_per_patient: avgN,
+      })
+      .eq("id", clinic.id);
     setSaving(false);
     if (error) return toast.error(error.message);
     toast.success("Clinic profile updated");
@@ -774,7 +1047,8 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline" className="border-slate-200 text-slate-700">
-          <Settings className="h-3.5 w-3.5 mr-1.5" />Profile
+          <Settings className="h-3.5 w-3.5 mr-1.5" />
+          Profile
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -783,34 +1057,69 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Clinic Name <span className="text-rose-500">*</span></Label>
+            <Label className="text-xs">
+              Clinic Name <span className="text-rose-500">*</span>
+            </Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Full Clinic Address / Google Map Link <span className="text-rose-500">*</span></Label>
-            <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St, City / https://maps.google.com/…" />
+            <Label className="text-xs">
+              Full Clinic Address / Google Map Link <span className="text-rose-500">*</span>
+            </Label>
+            <Input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="123 Main St, City / https://maps.google.com/…"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">Clinic Mobile (optional)</Label>
-              <Input inputMode="numeric" value={mobile} onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))} />
+              <Label className="text-xs">
+                Clinic's Whatsapp Number <span className="text-rose-500">*</span>
+              </Label>
+              <Input
+                required
+                inputMode="numeric"
+                placeholder="10-digit WhatsApp number"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Must be an active WhatsApp number to route queue alerts
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Clinic default avg time / patient (min)</Label>
-              <Input inputMode="numeric" value={avg} onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))} />
+              <Input
+                inputMode="numeric"
+                value={avg}
+                onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))}
+              />
             </div>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={save} disabled={saving} className="bg-sky-600 hover:bg-sky-700">{saving ? "Saving..." : "Save"}</Button>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={saving} className="bg-sky-600 hover:bg-sky-700">
+            {saving ? "Saving..." : "Save"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function ManageDoctorsDialog({ doctors, clinicId, onChange }: { doctors: Doctor[]; clinicId?: string; onChange: () => void }) {
+function ManageDoctorsDialog({
+  doctors,
+  clinicId,
+  onChange,
+}: {
+  doctors: Doctor[];
+  clinicId?: string;
+  onChange: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [specialty, setSpecialty] = useState("");
@@ -824,11 +1133,15 @@ function ManageDoctorsDialog({ doctors, clinicId, onChange }: { doctors: Doctor[
       return toast.error("Avg time must be 1–240 minutes (or blank).");
     }
     const { error } = await supabase.from("doctors").insert({
-      clinic_id: clinicId, name: name.trim(), specialty: specialty.trim(),
+      clinic_id: clinicId,
+      name: name.trim(),
+      specialty: specialty.trim(),
       avg_time_per_patient: avgParsed,
     });
     if (error) return toast.error(error.message);
-    setName(""); setSpecialty(""); setAvg("");
+    setName("");
+    setSpecialty("");
+    setAvg("");
     onChange();
   };
 
@@ -852,20 +1165,31 @@ function ManageDoctorsDialog({ doctors, clinicId, onChange }: { doctors: Doctor[
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="border-slate-200 text-slate-700">Doctors</Button>
+        <Button size="sm" variant="outline" className="border-slate-200 text-slate-700">
+          Doctors
+        </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Manage Doctors</DialogTitle>
-          <DialogDescription className="text-xs">Specialty is required. Avg time per patient is optional (blank uses clinic default).</DialogDescription>
+          <DialogDescription className="text-xs">
+            Specialty is required. Avg time per patient is optional (blank uses clinic default).
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-3 gap-2">
             <Input placeholder="Name *" value={name} onChange={(e) => setName(e.target.value)} />
             <Input placeholder="Specialty *" value={specialty} onChange={(e) => setSpecialty(e.target.value)} />
-            <Input placeholder="Avg min (opt)" inputMode="numeric" value={avg} onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))} />
+            <Input
+              placeholder="Avg min (opt)"
+              inputMode="numeric"
+              value={avg}
+              onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))}
+            />
           </div>
-          <Button onClick={add} size="sm" className="bg-sky-600 hover:bg-sky-700">Add doctor</Button>
+          <Button onClick={add} size="sm" className="bg-sky-600 hover:bg-sky-700">
+            Add doctor
+          </Button>
           <div className="space-y-2 pt-2">
             {doctors.length === 0 && <div className="text-sm text-slate-500">No doctors yet.</div>}
             {doctors.map((d) => (
@@ -879,25 +1203,42 @@ function ManageDoctorsDialog({ doctors, clinicId, onChange }: { doctors: Doctor[
                   <Input
                     defaultValue={d.avg_time_per_patient == null ? "" : String(d.avg_time_per_patient)}
                     onBlur={(e) => updateAvg(d.id, e.target.value.replace(/\D/g, "").slice(0, 3))}
-                    inputMode="numeric" placeholder="—" className="w-16 h-8 text-sm"
+                    inputMode="numeric"
+                    placeholder="—"
+                    className="w-16 h-8 text-sm"
                   />
                   <span className="text-xs text-slate-400">min</span>
                 </div>
-                <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50" onClick={() => remove(d.id)}>Remove</Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-rose-600 hover:bg-rose-50"
+                  onClick={() => remove(d.id)}
+                >
+                  Remove
+                </Button>
               </div>
             ))}
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Done</Button>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Done
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function DoctorControlsStrip({ doctors, disabled, onDoctorArrived, onAvgChanged }: {
-  doctors: Doctor[]; disabled: boolean;
+function DoctorControlsStrip({
+  doctors,
+  disabled,
+  onDoctorArrived,
+  onAvgChanged,
+}: {
+  doctors: Doctor[];
+  disabled: boolean;
   onDoctorArrived: (doctorId: string) => void | Promise<void>;
   onAvgChanged: () => void;
 }) {
@@ -906,12 +1247,20 @@ function DoctorControlsStrip({ doctors, disabled, onDoctorArrived, onAvgChanged 
     <Card className="border-slate-200 shadow-sm">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm text-slate-700">Active doctors</CardTitle>
-        <CardDescription className="text-xs">Set per-doctor avg consult time and mark the doctor's arrival for today.</CardDescription>
+        <CardDescription className="text-xs">
+          Set per-doctor avg consult time and mark the doctor's arrival for today.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {doctors.map((d) => (
-            <DoctorControlCard key={d.id} doctor={d} disabled={disabled} onDoctorArrived={onDoctorArrived} onAvgChanged={onAvgChanged} />
+            <DoctorControlCard
+              key={d.id}
+              doctor={d}
+              disabled={disabled}
+              onDoctorArrived={onDoctorArrived}
+              onAvgChanged={onAvgChanged}
+            />
           ))}
         </div>
       </CardContent>
@@ -919,15 +1268,25 @@ function DoctorControlsStrip({ doctors, disabled, onDoctorArrived, onAvgChanged 
   );
 }
 
-function DoctorControlCard({ doctor, disabled, onDoctorArrived, onAvgChanged }: {
-  doctor: Doctor; disabled: boolean;
+function DoctorControlCard({
+  doctor,
+  disabled,
+  onDoctorArrived,
+  onAvgChanged,
+}: {
+  doctor: Doctor;
+  disabled: boolean;
   onDoctorArrived: (doctorId: string) => void | Promise<void>;
   onAvgChanged: () => void;
 }) {
-  const [avg, setAvg] = useState<string>(doctor.avg_time_per_patient == null ? "" : String(doctor.avg_time_per_patient));
+  const [avg, setAvg] = useState<string>(
+    doctor.avg_time_per_patient == null ? "" : String(doctor.avg_time_per_patient),
+  );
   const [saving, setSaving] = useState(false);
   const [arriving, setArriving] = useState(false);
-  useEffect(() => { setAvg(doctor.avg_time_per_patient == null ? "" : String(doctor.avg_time_per_patient)); }, [doctor.avg_time_per_patient]);
+  useEffect(() => {
+    setAvg(doctor.avg_time_per_patient == null ? "" : String(doctor.avg_time_per_patient));
+  }, [doctor.avg_time_per_patient]);
 
   const saveAvg = async () => {
     const trimmed = avg.trim();
@@ -953,16 +1312,27 @@ function DoctorControlCard({ doctor, disabled, onDoctorArrived, onAvgChanged }: 
       <div className="flex items-center gap-2">
         <Label className="text-xs text-slate-600 whitespace-nowrap">Avg (min)</Label>
         <Input
-          inputMode="numeric" value={avg}
+          inputMode="numeric"
+          value={avg}
           onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))}
           onBlur={saveAvg}
-          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-          placeholder="—" disabled={saving} className="h-8 text-sm"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          placeholder="—"
+          disabled={saving}
+          className="h-8 text-sm"
         />
       </div>
       <Button
-        size="sm" variant="outline" disabled={disabled || arriving}
-        onClick={async () => { setArriving(true); await onDoctorArrived(doctor.id); setArriving(false); }}
+        size="sm"
+        variant="outline"
+        disabled={disabled || arriving}
+        onClick={async () => {
+          setArriving(true);
+          await onDoctorArrived(doctor.id);
+          setArriving(false);
+        }}
         className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
       >
         <DoorOpen className="h-3.5 w-3.5 mr-1.5" />
@@ -972,7 +1342,12 @@ function DoctorControlCard({ doctor, disabled, onDoctorArrived, onAvgChanged }: 
   );
 }
 
-function DailyShiftPanel({ doctors, tokens, disabled, onApply }: {
+function DailyShiftPanel({
+  doctors,
+  tokens,
+  disabled,
+  onApply,
+}: {
   doctors: Doctor[];
   tokens: Token[];
   disabled: boolean;
@@ -991,8 +1366,12 @@ function DailyShiftPanel({ doctors, tokens, disabled, onApply }: {
   return (
     <Card className="border-slate-200 shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm text-slate-700 flex items-center gap-2"><Timer className="h-4 w-4" /> Daily shift status</CardTitle>
-        <CardDescription className="text-xs">Confirm on time or declare a delay — allowed up to 45 minutes before the doctor's first appointment.</CardDescription>
+        <CardTitle className="text-sm text-slate-700 flex items-center gap-2">
+          <Timer className="h-4 w-4" /> Daily shift status
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Confirm on time or declare a delay — allowed up to 45 minutes before the doctor's first appointment.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1005,13 +1384,21 @@ function DailyShiftPanel({ doctors, tokens, disabled, onApply }: {
             let reason = "No waiting patients today";
             if (first && /^\d{1,2}:\d{2}$/.test(first)) {
               const [fh, fm] = first.split(":").map((n) => parseInt(n, 10));
-              const dt = new Date(); dt.setHours(fh, fm, 0, 0);
+              const dt = new Date();
+              dt.setHours(fh, fm, 0, 0);
               const cutoff = new Date(dt.getTime() - 45 * 60_000);
               allowed = now <= cutoff && !disabled;
               reason = allowed ? "" : `Window closed (first appt ${first})`;
             }
             return (
-              <ShiftDoctorCard key={d.id} doctor={d} allowed={allowed} reason={reason} first={first} onApply={onApply} />
+              <ShiftDoctorCard
+                key={d.id}
+                doctor={d}
+                allowed={allowed}
+                reason={reason}
+                first={first}
+                onApply={onApply}
+              />
             );
           })}
         </div>
@@ -1020,15 +1407,28 @@ function DailyShiftPanel({ doctors, tokens, disabled, onApply }: {
   );
 }
 
-function ShiftDoctorCard({ doctor, allowed, reason, first, onApply }: {
-  doctor: Doctor; allowed: boolean; reason: string; first: string | null;
+function ShiftDoctorCard({
+  doctor,
+  allowed,
+  reason,
+  first,
+  onApply,
+}: {
+  doctor: Doctor;
+  allowed: boolean;
+  reason: string;
+  first: string | null;
   onApply: (doctorId: string, status: "on_time" | "delayed", minutes?: number) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [delayOpen, setDelayOpen] = useState(false);
   const [minutes, setMinutes] = useState("15");
 
-  const runOnTime = async () => { setBusy(true); await onApply(doctor.id, "on_time"); setBusy(false); };
+  const runOnTime = async () => {
+    setBusy(true);
+    await onApply(doctor.id, "on_time");
+    setBusy(false);
+  };
   const runDelay = async () => {
     const m = parseInt(minutes, 10);
     if (!Number.isFinite(m) || m < 1) return toast.error("Enter a positive delay in minutes");
@@ -1045,27 +1445,45 @@ function ShiftDoctorCard({ doctor, allowed, reason, first, onApply }: {
         <div className="text-xs text-slate-500 truncate">First today: {first ? formatDisplay(first) : "—"}</div>
       </div>
       <div className="flex gap-2">
-        <Button size="sm" variant="outline" disabled={!allowed || busy}
-          className="flex-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={runOnTime}>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!allowed || busy}
+          className="flex-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+          onClick={runOnTime}
+        >
           On Time
         </Button>
         <Dialog open={delayOpen} onOpenChange={setDelayOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" variant="outline" disabled={!allowed || busy}
-              className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50">Declare Delay</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!allowed || busy}
+              className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50"
+            >
+              Declare Delay
+            </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Declare delay for {doctor.name}</DialogTitle>
-              <DialogDescription>Shifts every today's waiting slot for this doctor forward and notifies patients.</DialogDescription>
+              <DialogDescription>
+                Shifts every today's waiting slot for this doctor forward and notifies patients.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
               <Label className="text-xs">Delay in minutes</Label>
-              <Input inputMode="numeric" value={minutes}
-                onChange={(e) => setMinutes(e.target.value.replace(/\D/g, "").slice(0, 3))} />
+              <Input
+                inputMode="numeric"
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value.replace(/\D/g, "").slice(0, 3))}
+              />
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDelayOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setDelayOpen(false)}>
+                Cancel
+              </Button>
               <Button onClick={runDelay} disabled={busy} className="bg-amber-600 hover:bg-amber-700">
                 {busy ? "Applying…" : "Apply delay & notify"}
               </Button>
@@ -1104,12 +1522,23 @@ function FeedbackTray({ onSubmit }: { onSubmit: (message: string) => Promise<voi
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Suggestions / Feedback</DialogTitle>
-          <DialogDescription>Tell us what would make ClinicQ better. Your note goes to the ClinicQ team.</DialogDescription>
+          <DialogDescription>
+            Tell us what would make ClinicQ better. Your note goes to the ClinicQ team.
+          </DialogDescription>
         </DialogHeader>
-        <Textarea rows={5} value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Share suggestions, bugs, ideas…" />
+        <Textarea
+          rows={5}
+          value={msg}
+          onChange={(e) => setMsg(e.target.value)}
+          placeholder="Share suggestions, bugs, ideas…"
+        />
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={send} disabled={saving} className="bg-sky-600 hover:bg-sky-700">{saving ? "Sending…" : "Send"}</Button>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={send} disabled={saving} className="bg-sky-600 hover:bg-sky-700">
+            {saving ? "Sending…" : "Send"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
