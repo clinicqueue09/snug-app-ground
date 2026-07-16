@@ -15,6 +15,8 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedAdminWhatsappRouteImport } from './routes/_authenticated/admin/whatsapp'
+import { Route as AuthenticatedAdminFeedbackRouteImport } from './routes/_authenticated/admin/feedback'
 import { Route as ApiPublicHooksWhatsappRemindersRouteImport } from './routes/api/public/hooks/whatsapp-reminders'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -46,6 +48,18 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAdminWhatsappRoute =
+  AuthenticatedAdminWhatsappRouteImport.update({
+    id: '/admin/whatsapp',
+    path: '/admin/whatsapp',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAdminFeedbackRoute =
+  AuthenticatedAdminFeedbackRouteImport.update({
+    id: '/admin/feedback',
+    path: '/admin/feedback',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiPublicHooksWhatsappRemindersRoute =
   ApiPublicHooksWhatsappRemindersRouteImport.update({
     id: '/api/public/hooks/whatsapp-reminders',
@@ -59,6 +73,8 @@ export interface FileRoutesByFullPath {
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
+  '/admin/whatsapp': typeof AuthenticatedAdminWhatsappRoute
   '/api/public/hooks/whatsapp-reminders': typeof ApiPublicHooksWhatsappRemindersRoute
 }
 export interface FileRoutesByTo {
@@ -67,6 +83,8 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
+  '/admin/whatsapp': typeof AuthenticatedAdminWhatsappRoute
   '/api/public/hooks/whatsapp-reminders': typeof ApiPublicHooksWhatsappRemindersRoute
 }
 export interface FileRoutesById {
@@ -77,6 +95,8 @@ export interface FileRoutesById {
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
+  '/_authenticated/admin/whatsapp': typeof AuthenticatedAdminWhatsappRoute
   '/api/public/hooks/whatsapp-reminders': typeof ApiPublicHooksWhatsappRemindersRoute
 }
 export interface FileRouteTypes {
@@ -87,6 +107,8 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/reset-password'
     | '/dashboard'
+    | '/admin/feedback'
+    | '/admin/whatsapp'
     | '/api/public/hooks/whatsapp-reminders'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -95,6 +117,8 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/reset-password'
     | '/dashboard'
+    | '/admin/feedback'
+    | '/admin/whatsapp'
     | '/api/public/hooks/whatsapp-reminders'
   id:
     | '__root__'
@@ -104,6 +128,8 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/reset-password'
     | '/_authenticated/dashboard'
+    | '/_authenticated/admin/feedback'
+    | '/_authenticated/admin/whatsapp'
     | '/api/public/hooks/whatsapp-reminders'
   fileRoutesById: FileRoutesById
 }
@@ -160,6 +186,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/whatsapp': {
+      id: '/_authenticated/admin/whatsapp'
+      path: '/admin/whatsapp'
+      fullPath: '/admin/whatsapp'
+      preLoaderRoute: typeof AuthenticatedAdminWhatsappRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/feedback': {
+      id: '/_authenticated/admin/feedback'
+      path: '/admin/feedback'
+      fullPath: '/admin/feedback'
+      preLoaderRoute: typeof AuthenticatedAdminFeedbackRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/hooks/whatsapp-reminders': {
       id: '/api/public/hooks/whatsapp-reminders'
       path: '/api/public/hooks/whatsapp-reminders'
@@ -172,10 +212,14 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedAdminFeedbackRoute: typeof AuthenticatedAdminFeedbackRoute
+  AuthenticatedAdminWhatsappRoute: typeof AuthenticatedAdminWhatsappRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedAdminFeedbackRoute: AuthenticatedAdminFeedbackRoute,
+  AuthenticatedAdminWhatsappRoute: AuthenticatedAdminWhatsappRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -192,13 +236,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -14,23 +14,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          id: string
+          updated_at: string
+          whatsapp_tunnel_url: string | null
+        }
+        Insert: {
+          id?: string
+          updated_at?: string
+          whatsapp_tunnel_url?: string | null
+        }
+        Update: {
+          id?: string
+          updated_at?: string
+          whatsapp_tunnel_url?: string | null
+        }
+        Relationships: []
+      }
       clinic_settings: {
         Row: {
           clinic_id: string
           created_at: string
-          tunnel_url: string | null
           updated_at: string
         }
         Insert: {
           clinic_id: string
           created_at?: string
-          tunnel_url?: string | null
           updated_at?: string
         }
         Update: {
           clinic_id?: string
           created_at?: string
-          tunnel_url?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -79,6 +94,54 @@ export type Database = {
         }
         Relationships: []
       }
+      doctor_shift_status: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          created_by: string | null
+          delay_minutes: number
+          doctor_id: string
+          id: string
+          shift_date: string
+          status: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          created_by?: string | null
+          delay_minutes?: number
+          doctor_id: string
+          id?: string
+          shift_date: string
+          status: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          created_by?: string | null
+          delay_minutes?: number
+          doctor_id?: string
+          id?: string
+          shift_date?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doctor_shift_status_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doctor_shift_status_doctor_id_fkey"
+            columns: ["doctor_id"]
+            isOneToOne: false
+            referencedRelation: "doctors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       doctors: {
         Row: {
           avg_time_per_patient: number | null
@@ -113,6 +176,82 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "doctors_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feedback: {
+        Row: {
+          clinic_id: string | null
+          created_at: string
+          id: string
+          message: string
+          user_id: string | null
+          user_role: string | null
+        }
+        Insert: {
+          clinic_id?: string | null
+          created_at?: string
+          id?: string
+          message: string
+          user_id?: string | null
+          user_role?: string | null
+        }
+        Update: {
+          clinic_id?: string | null
+          created_at?: string
+          id?: string
+          message?: string
+          user_id?: string | null
+          user_role?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_notifications: {
+        Row: {
+          body: string
+          clinic_id: string
+          created_at: string
+          id: string
+          kind: string
+          read_at: string | null
+          target_date: string | null
+          title: string
+        }
+        Insert: {
+          body: string
+          clinic_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          read_at?: string | null
+          target_date?: string | null
+          title: string
+        }
+        Update: {
+          body?: string
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          read_at?: string | null
+          target_date?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_notifications_clinic_id_fkey"
             columns: ["clinic_id"]
             isOneToOne: false
             referencedRelation: "clinics"
@@ -227,15 +366,43 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       current_clinic_id: { Args: never; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "super_admin" | "receptionist"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -362,6 +529,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["super_admin", "receptionist"],
+    },
   },
 } as const

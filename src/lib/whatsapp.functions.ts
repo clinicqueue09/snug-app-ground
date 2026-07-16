@@ -3,9 +3,16 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const MAX_TOTAL_MESSAGES = 7;
 const MAX_TOKEN_UPDATES = 3;
-const DISCLAIMER = "Note: The appointment time provided is tentative and subject to change based on the live movement of the clinic queue.";
+const DISCLAIMER =
+  "Note: All stated times are tentative appointment times and may shift with live queue movement.";
 
-type Variant = "confirmation" | "next_in_line" | "doctor_arrived" | "token_update" | "reminder_24h";
+type Variant =
+  | "confirmation"
+  | "next_in_line"
+  | "doctor_arrived"
+  | "token_update"
+  | "reminder_24h"
+  | "shift_update";
 
 function fmtTime12(value: string | null | undefined): string {
   if (!value || !/^\d{1,2}:\d{2}$/.test(value)) return "";
@@ -21,35 +28,56 @@ function doctorLabel(name: string, specialty: string | null | undefined): string
   return spec ? `Dr. ${name} (${spec})` : `Dr. ${name}`;
 }
 
-function buildMessage(params: {
+export function buildMessage(params: {
   variant: Variant;
   patientName: string;
   doctorName: string;
   doctorSpecialty: string | null;
-  clinicName: string; clinicAddress: string; clinicMobile: string | null;
-  date: string; time: string | null; tokenNumber: number;
+  clinicName: string;
+  clinicAddress: string; // "Full Clinic Address / Google Map Link"
+  clinicMobile: string | null;
+  date: string;
+  time: string | null;
+  runningTokenNumber: number | null;
+  latestTokenNumber: number | null;
   tentativeTime?: string | null;
+  delayMinutes?: number | null;
 }): string {
   const timeStr = fmtTime12(params.time);
   const contact = params.clinicMobile ? ` Contact: ${params.clinicMobile}.` : "";
-  const location = ` Location: ${params.clinicAddress}.${contact}`;
+  const location = `Full Clinic Address / Google Map Link: ${params.clinicAddress}.${contact}`;
   const base = `Hello ${params.patientName},`;
   const doc = doctorLabel(params.doctorName, params.doctorSpecialty);
+  const dt = `Date: ${params.date}${timeStr ? ` | Time: ${timeStr}` : ""}`;
+  const tokens =
+    params.runningTokenNumber != null || params.latestTokenNumber != null
+      ? `Currently in treatment: Token #${params.runningTokenNumber ?? "—"}. Your latest token: #${
+          params.latestTokenNumber ?? "—"
+        }.`
+      : "";
 
   switch (params.variant) {
     case "confirmation":
-      return `${base} your appointment at ${params.clinicName} with ${doc} is confirmed for ${params.date}${timeStr ? ` at ${timeStr}` : ""}. Your Token is #${params.tokenNumber}.${location}\n\n${DISCLAIMER}`;
+      // Per spec: date, time, full address / map link. NO token numbers.
+      return `${base} your appointment at ${params.clinicName} with ${doc} is confirmed.\n${dt}\n${location}\n\n${DISCLAIMER}`;
     case "reminder_24h":
-      return `${base} reminder: your appointment at ${params.clinicName} with ${doc} is tomorrow, ${params.date}${timeStr ? ` at ${timeStr}` : ""}. Your Token is #${params.tokenNumber}.${location}\n\n${DISCLAIMER}`;
+      return `${base} reminder — your appointment at ${params.clinicName} with ${doc} is tomorrow.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
     case "doctor_arrived":
-      return `${base} ${doc} has arrived at ${params.clinicName} and consultations are starting. Your Token is #${params.tokenNumber}.${location}`;
+      return `${base} ${doc} has arrived at ${params.clinicName} and consultations are starting.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
     case "next_in_line":
-      return `${base} you are next in line for ${doc} at ${params.clinicName}. Your Token is #${params.tokenNumber}. Please be ready.${location}\n\n${DISCLAIMER}`;
+      return `${base} you are next in line for ${doc} at ${params.clinicName}. Please be ready.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
     case "token_update": {
       const timing = params.tentativeTime
-        ? ` — your tentative appointment time with ${doc} at ${params.clinicName} is now ${params.tentativeTime}`
-        : ` — an update from ${doc} at ${params.clinicName}`;
-      return `${base} queue update${timing}. Your Token is #${params.tokenNumber}.${location}\n\n${DISCLAIMER}`;
+        ? `Your tentative time with ${doc} is now ${params.tentativeTime}.`
+        : `Queue update from ${doc} at ${params.clinicName}.`;
+      return `${base} ${timing}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
+    }
+    case "shift_update": {
+      const delay = params.delayMinutes && params.delayMinutes > 0
+        ? `Doctor shift is delayed by ${params.delayMinutes} minutes.`
+        : `Doctor shift is on time.`;
+      const newTime = params.tentativeTime ? ` Your updated tentative time: ${params.tentativeTime}.` : "";
+      return `${base} ${delay}${newTime}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
     }
   }
 }
@@ -62,6 +90,40 @@ async function postToTunnel(tunnelUrl: string, phone10: string, message: string)
     body: JSON.stringify({ phone: `91${phone10}`, message }),
   });
   return { ok: res.ok, status: res.status };
+}
+
+async function getGlobalTunnelUrl(supabase: any): Promise<string | null> {
+  const { data } = await supabase.from("app_settings").select("whatsapp_tunnel_url").eq("id", "global").maybeSingle();
+  const url = (data as any)?.whatsapp_tunnel_url?.trim();
+  return url || null;
+}
+
+// Compute per-doctor per-day chronological display tokens (index + 1) and running token.
+async function computeQueueContext(
+  supabase: any,
+  clinicId: string,
+  doctorId: string | null,
+  appointmentDate: string,
+) {
+  let q = supabase
+    .from("tokens")
+    .select("id, token_number, appointment_time, created_at, status")
+    .eq("clinic_id", clinicId)
+    .eq("appointment_date", appointmentDate)
+    .neq("status", "cancelled");
+  q = doctorId ? q.eq("doctor_id", doctorId) : q.is("doctor_id", null);
+  const { data } = await q;
+  const rows = ((data as any[]) ?? []).slice().sort((a, b) => {
+    const at = a.appointment_time ?? "99:99";
+    const bt = b.appointment_time ?? "99:99";
+    if (at !== bt) return at.localeCompare(bt);
+    return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+  });
+  const displayToken = new Map<string, number>();
+  rows.forEach((r, i) => displayToken.set(r.id, i + 1));
+  const active = rows.find((r) => r.status === "in_consultation");
+  const runningTokenNumber = active ? displayToken.get(active.id) ?? null : null;
+  return { displayToken, runningTokenNumber };
 }
 
 export const sendWhatsAppMessage = createServerFn({ method: "POST" })
@@ -96,17 +158,19 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
       return { ok: false as const, error: `Token-update cap reached (${MAX_TOKEN_UPDATES}/patient).` };
     }
 
-    const [clinicRes, doctorRes, settingsRes] = await Promise.all([
+    const [clinicRes, doctorRes, tunnelUrl] = await Promise.all([
       supabase.from("clinics").select("name, address, clinic_mobile").eq("id", t.clinic_id).maybeSingle(),
       t.doctor_id
         ? supabase.from("doctors").select("name, specialty").eq("id", t.doctor_id).maybeSingle()
         : Promise.resolve({ data: null as any, error: null }),
-      supabase.from("clinic_settings").select("tunnel_url").eq("clinic_id", t.clinic_id).maybeSingle(),
+      getGlobalTunnelUrl(supabase),
     ]);
     const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null }) as any;
     const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
-    const tunnelUrl = (settingsRes.data as { tunnel_url: string | null } | null)?.tunnel_url?.trim();
-    if (!tunnelUrl) return { ok: false as const, error: "WhatsApp tunnel URL not configured" };
+    if (!tunnelUrl) return { ok: false as const, error: "WhatsApp gateway not configured" };
+
+    const ctx = await computeQueueContext(supabase, t.clinic_id, t.doctor_id, t.appointment_date);
+    const latest = ctx.displayToken.get(t.id) ?? t.token_number ?? null;
 
     const message = buildMessage({
       variant: data.variant,
@@ -118,7 +182,8 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
       clinicMobile: clinic.clinic_mobile,
       date: t.appointment_date,
       time: t.appointment_time,
-      tokenNumber: t.token_number,
+      runningTokenNumber: ctx.runningTokenNumber,
+      latestTokenNumber: latest,
       tentativeTime: data.tentativeTime ?? null,
     });
 
@@ -136,12 +201,6 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
     return { ok: true as const, status: result.status };
   });
 
-/**
- * Fires the Doctor-Arrived alert for every waiting token belonging to
- * `doctorId` whose appointment_date == today. Server re-checks the date per
- * row and dedupes via doctor_arrived_sent_at. Returns how many messages were
- * sent successfully.
- */
 export const sendDoctorArrivedForDoctor = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { doctorId: string }) => input)
@@ -161,20 +220,22 @@ export const sendDoctorArrivedForDoctor = createServerFn({ method: "POST" })
     if (!rows || rows.length === 0) return { ok: true as const, sent: 0 };
 
     const clinicId = (rows[0] as any).clinic_id as string;
-    const [clinicRes, doctorRes, settingsRes] = await Promise.all([
+    const [clinicRes, doctorRes, tunnelUrl] = await Promise.all([
       supabase.from("clinics").select("name, address, clinic_mobile").eq("id", clinicId).maybeSingle(),
       supabase.from("doctors").select("name, specialty").eq("id", data.doctorId).maybeSingle(),
-      supabase.from("clinic_settings").select("tunnel_url").eq("clinic_id", clinicId).maybeSingle(),
+      getGlobalTunnelUrl(supabase),
     ]);
     const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null }) as any;
     const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
-    const tunnelUrl = (settingsRes.data as { tunnel_url: string | null } | null)?.tunnel_url?.trim();
-    if (!tunnelUrl) return { ok: false as const, error: "WhatsApp tunnel URL not configured" };
+    if (!tunnelUrl) return { ok: false as const, error: "WhatsApp gateway not configured" };
+
+    const ctx = await computeQueueContext(supabase, clinicId, data.doctorId, todayISO);
 
     let sent = 0;
     for (const raw of rows) {
       const t = raw as any;
       if ((t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) continue;
+      const latest = ctx.displayToken.get(t.id) ?? t.token_number ?? null;
       const msg = buildMessage({
         variant: "doctor_arrived",
         patientName: t.patient_name,
@@ -185,7 +246,8 @@ export const sendDoctorArrivedForDoctor = createServerFn({ method: "POST" })
         clinicMobile: clinic.clinic_mobile,
         date: t.appointment_date,
         time: t.appointment_time,
-        tokenNumber: t.token_number,
+        runningTokenNumber: ctx.runningTokenNumber,
+        latestTokenNumber: latest,
       });
       const res = await postToTunnel(tunnelUrl, t.phone_number, msg);
       if (!res.ok) continue;
@@ -198,13 +260,6 @@ export const sendDoctorArrivedForDoctor = createServerFn({ method: "POST" })
     return { ok: true as const, sent };
   });
 
-/**
- * After the queue advances, recompute waiting positions for a doctor+date and
- * send token_update or next_in_line messages. Uses the doctor's own
- * avg_time_per_patient when set, otherwise falls back to the clinic value.
- * If neither is available, the update fires without a calculated tentative
- * time (the disclaimer still ships).
- */
 export const advanceQueueNotifications = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { doctorId: string | null; appointmentDate: string }) => input)
@@ -213,13 +268,19 @@ export const advanceQueueNotifications = createServerFn({ method: "POST" })
 
     let q = supabase
       .from("tokens")
-      .select("id, token_number, whatsapp_messages_sent, token_update_count, last_position_notified")
+      .select("id, token_number, appointment_time, created_at, clinic_id, whatsapp_messages_sent, token_update_count, last_position_notified")
       .eq("appointment_date", data.appointmentDate)
-      .eq("status", "waiting")
-      .order("token_number", { ascending: true });
+      .eq("status", "waiting");
     q = data.doctorId ? q.eq("doctor_id", data.doctorId) : q.is("doctor_id", null);
     const { data: waiting, error } = await q;
     if (error || !waiting) return { ok: false as const, error: error?.message ?? "Load failed" };
+
+    const sorted = (waiting as any[]).slice().sort((a, b) => {
+      const at = a.appointment_time ?? "99:99";
+      const bt = b.appointment_time ?? "99:99";
+      if (at !== bt) return at.localeCompare(bt);
+      return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+    });
 
     const [clinicRow, doctorRow] = await Promise.all([
       supabase.from("clinics").select("avg_time_per_patient").maybeSingle(),
@@ -229,13 +290,13 @@ export const advanceQueueNotifications = createServerFn({ method: "POST" })
     ]);
     const clinicAvg = ((clinicRow.data as any)?.avg_time_per_patient ?? null) as number | null;
     const doctorAvg = ((doctorRow.data as any)?.avg_time_per_patient ?? null) as number | null;
-    const avg = doctorAvg ?? clinicAvg; // may be null → send without tentative time
+    const avg = doctorAvg ?? clinicAvg;
 
     const results: Array<{ tokenId: string; position: number; queued: boolean; reason?: string }> = [];
     const queued: Array<{ tokenId: string; variant: Variant; tentativeTime: string | null }> = [];
 
-    for (let i = 0; i < waiting.length; i++) {
-      const t = waiting[i] as any;
+    for (let i = 0; i < sorted.length; i++) {
+      const t = sorted[i] as any;
       const position = i + 1;
       const used = t.token_update_count ?? 0;
       const total = t.whatsapp_messages_sent ?? 0;
@@ -272,4 +333,99 @@ export const advanceQueueNotifications = createServerFn({ method: "POST" })
     }
 
     return { ok: true as const, queued, results };
+  });
+
+/**
+ * Shift status: shifts today's waiting tokens forward by delayMinutes for the
+ * doctor and dispatches a shift_update WhatsApp to all affected patients.
+ */
+export const applyDoctorShiftStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { doctorId: string; status: "on_time" | "delayed"; delayMinutes?: number }) => input)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const now = new Date();
+    const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const delayMinutes = data.status === "delayed" ? Math.max(1, Math.min(480, Math.floor(data.delayMinutes ?? 0))) : 0;
+    if (data.status === "delayed" && delayMinutes === 0) return { ok: false as const, error: "Delay minutes required" };
+
+    // Load doctor's waiting tokens today
+    const { data: rows } = await supabase
+      .from("tokens")
+      .select("id, clinic_id, doctor_id, patient_name, phone_number, token_number, appointment_date, appointment_time, whatsapp_messages_sent, created_at")
+      .eq("doctor_id", data.doctorId)
+      .eq("appointment_date", todayISO)
+      .eq("status", "waiting");
+    const tokens = (rows as any[]) ?? [];
+    if (tokens.length === 0) return { ok: false as const, error: "No waiting patients today for this doctor" };
+
+    // 45-min-before-first check
+    const sorted = tokens.slice().sort((a, b) => (a.appointment_time ?? "").localeCompare(b.appointment_time ?? ""));
+    const first = sorted[0].appointment_time as string | null;
+    if (!first || !/^\d{1,2}:\d{2}$/.test(first)) return { ok: false as const, error: "First appointment has no valid time" };
+    const [fh, fm] = first.split(":").map((n) => parseInt(n, 10));
+    const firstDT = new Date(); firstDT.setHours(fh, fm, 0, 0);
+    const cutoff = new Date(firstDT.getTime() - 45 * 60_000);
+    if (now > cutoff) return { ok: false as const, error: "Must submit at least 45 minutes before the first appointment" };
+
+    const clinicId = tokens[0].clinic_id as string;
+    // Log shift status
+    await (supabase.from("doctor_shift_status") as any)
+      .upsert({
+        clinic_id: clinicId, doctor_id: data.doctorId, shift_date: todayISO,
+        status: data.status, delay_minutes: delayMinutes, created_by: userId,
+      }, { onConflict: "doctor_id,shift_date" });
+
+    // If delayed, shift appointment_time forward
+    if (delayMinutes > 0) {
+      for (const t of tokens) {
+        if (!t.appointment_time) continue;
+        const [h, m] = String(t.appointment_time).split(":").map((n) => parseInt(n, 10));
+        const dt = new Date(); dt.setHours(h, m + delayMinutes, 0, 0);
+        const newTime = `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
+        await supabase.from("tokens").update({ appointment_time: newTime }).eq("id", t.id);
+        t.appointment_time = newTime;
+      }
+    }
+
+    // Broadcast shift_update to all affected patients
+    const [clinicRes, doctorRes, tunnelUrl] = await Promise.all([
+      supabase.from("clinics").select("name, address, clinic_mobile").eq("id", clinicId).maybeSingle(),
+      supabase.from("doctors").select("name, specialty").eq("id", data.doctorId).maybeSingle(),
+      getGlobalTunnelUrl(supabase),
+    ]);
+    const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null }) as any;
+    const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
+
+    let sent = 0;
+    if (tunnelUrl) {
+      const ctx = await computeQueueContext(supabase, clinicId, data.doctorId, todayISO);
+      for (const t of tokens) {
+        if ((t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) continue;
+        const latest = ctx.displayToken.get(t.id) ?? t.token_number ?? null;
+        const msg = buildMessage({
+          variant: "shift_update",
+          patientName: t.patient_name,
+          doctorName: doctor.name,
+          doctorSpecialty: doctor.specialty ?? null,
+          clinicName: clinic.name,
+          clinicAddress: clinic.address,
+          clinicMobile: clinic.clinic_mobile,
+          date: t.appointment_date,
+          time: t.appointment_time,
+          runningTokenNumber: ctx.runningTokenNumber,
+          latestTokenNumber: latest,
+          tentativeTime: t.appointment_time ? fmtTime12(t.appointment_time) : null,
+          delayMinutes,
+        });
+        const res = await postToTunnel(tunnelUrl, t.phone_number, msg);
+        if (!res.ok) continue;
+        await (supabase.from("tokens") as any).update({
+          whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
+        }).eq("id", t.id);
+        sent += 1;
+      }
+    }
+
+    return { ok: true as const, sent, shifted: delayMinutes > 0 ? tokens.length : 0, gatewayConfigured: Boolean(tunnelUrl) };
   });
