@@ -448,7 +448,7 @@ export const connectWhatsApp = createServerFn({ method: "POST" })
       if (body?.status === "already_connected") {
         await (supabase.from("clinics") as any).update({ whatsapp_connected: true }).eq("id", data.clinicId);
       }
-      return { ok: res.ok as const, status: res.status, body };
+      return { ok: res.ok, status: res.status, body };
     } catch (e: any) {
       return { ok: false as const, status: 0, error: e?.message ?? "network error" };
     }
