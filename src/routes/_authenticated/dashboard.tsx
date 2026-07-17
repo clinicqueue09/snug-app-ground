@@ -324,6 +324,14 @@ function Dashboard() {
             }
           }}
         />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <WhatsAppSetupCard
+            clinicId={clinic?.id}
+            connected={Boolean(clinic?.whatsapp_connected)}
+            onChange={loadAll}
+          />
+          <WarmConnectCard disabled={trialExpired || !clinic?.whatsapp_connected} />
+        </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
