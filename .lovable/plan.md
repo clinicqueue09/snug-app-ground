@@ -1,85 +1,58 @@
-## ClinicQ — Final Architecture, UI, Security & Notifications Pass
+# ClinicQ — Multi-tenant WhatsApp + UX updates
 
-Sequenced across schema → auth UI → subscription/trial → centralized WhatsApp → dashboard/queue → shift buffer → messaging payloads → feedback loop. Delivered as one migration + code changes. Super Admin is a new role; feedback + global tunnel URL live behind it.
+## 1. Database migration (`clinics`)
+Add columns:
+- `whatsapp_connected boolean NOT NULL DEFAULT false`
+- `subscription_rate numeric(10,2) NOT NULL DEFAULT 0`
 
----
+Backfill existing rows to defaults. No RLS changes (existing clinic policies already cover these columns). `subscription_rate` will be editable only by super_admin — enforced via a policy update so `authenticated` non-admins cannot update it (they keep update on the other fields).
 
-### Block 1 — Schema & role model (single migration)
+## 2. Registration form (`src/routes/auth.tsx`)
+- Rename label → **"Clinic Mobile (Whatsapp Number only)"** with required asterisk.
+- Make field required: submit is blocked unless exactly 10 digits.
+- Update `handle_new_user()` trigger to reject empty mobile (fallback to raising / storing NULL — but UI blocks empties; keep server tolerant).
 
-- **`app_role` enum** (new): `super_admin`, `receptionist`. **`user_roles`** table (`user_id`, `role`) + `has_role(uuid, app_role)` SECURITY DEFINER + RLS + grants (per project user-roles rule).
-- **`clinics`**: trial length constant becomes 21 days (default `trial_ends_at = now() + interval '21 days'` on new signups; existing rows untouched unless user asks to backfill).
-- **`doctors`**: keep existing `avg_time_per_patient INT NULL` (already added).
-- **`tokens`**: add UNIQUE partial index on `(clinic_id, doctor_id, appointment_date, appointment_time) WHERE status <> 'cancelled'` to hard-block double-booking. Drop reliance on stored `token_number` as source of truth — keep column for legacy but compute display token from chronological row index (see Block 4). No trigger renumber needed.
-- **`clinic_settings`**: drop `tunnel_url` column (centralized now). Migration guards for existing data.
-- **`app_settings`** (new, single-row keyed by `id='global'`): `whatsapp_tunnel_url TEXT`, `updated_at`. RLS: SELECT/UPDATE only via `has_role(auth.uid(),'super_admin')`. Grants to authenticated + service_role.
-- **`feedback`** (new): `id`, `clinic_id`, `user_id`, `user_role TEXT`, `message TEXT NOT NULL`, `created_at`. RLS: receptionist can INSERT for own clinic; SELECT only for `super_admin`. Grants per rule.
-- **`doctor_shift_status`** (new): `id`, `clinic_id`, `doctor_id`, `shift_date`, `status` (`on_time`|`delayed`), `delay_minutes INT`, `created_by`, `created_at`. UNIQUE `(doctor_id, shift_date)`. RLS scoped to clinic via `current_clinic_id()`.
-- **`handle_new_user()`**: stop reading `avg_time_per_patient` from signup metadata; default clinic `avg_time_per_patient` to 10. Keep clinic name/address/mobile capture.
-- **Renewal reminder cron**: `pg_cron` job daily → POST to new `/api/public/hooks/renewal-reminders` that finds clinics whose `trial_ends_at` or `subscription_ends_at` is exactly 7 days out and inserts an in-app notification row (see below).
-- **`platform_notifications`** (new): `id`, `clinic_id`, `kind`, `title`, `body`, `read_at`, `created_at`. RLS: receptionist SELECT/UPDATE scoped by `current_clinic_id()`. Cron inserts via service role.
+## 3. Time slots → 10-minute intervals (`src/components/TimeSelect.tsx`)
+Change `MINUTES` from `["00","15","30","45"]` → `["00","10","20","30","40","50"]`. All appointment pickers using `TimeSelect` inherit this.
 
-### Block 2 — Auth UI (`src/routes/auth.tsx`, `forgot-password.tsx`, `reset-password.tsx`)
+## 4. Concurrent login
+Supabase already issues independent sessions per device/token — no code change needed. Verify no custom "single-session" logic exists (grep confirms none). Documented as a no-op in the change log.
 
-- Remove `avg_time_per_patient` field from sign-up form + metadata payload.
-- Address label + placeholder: **"Full Clinic Address / Google Map Link"**.
-- Post-signup toast: exactly **"Account created, verify your email"**.
-- Password fields: add show/hide eye toggle (lucide `Eye`/`EyeOff`) on Login, Sign-Up, and Reset Password panels.
+## 5. WhatsApp Setup UI + QR linking
+New component `src/components/WhatsAppSetupCard.tsx` mounted on the dashboard (Settings area — collapsible card in header/toolbar).
 
-### Block 3 — Doctor profiling + patient entry
+- Install `react-qr-code` (`bun add react-qr-code`).
+- "Link WhatsApp" button → server function `connectWhatsApp({ clinicId })` that POSTs to `http://15.207.87.63:3000/connect`.
+  - Why server-side: preview is served over HTTPS; a browser `fetch` to `http://` is blocked as mixed content. All AWS gateway calls go through `createServerFn` handlers.
+- Response `{ qr }` → render `<QRCode value={qr} />`.
+- Response `{ status: "already_connected" }` → update `clinics.whatsapp_connected = true`, hide QR, show green "WhatsApp Connected" badge (via realtime/refetch).
+- Poll same `/connect` every 4s while QR visible; stop on connect, unmount, or error. Cleanup on tab hide.
+- Badge state driven by `clinics.whatsapp_connected` (live query).
 
-- **Manage Doctors dialog** (in dashboard): add optional numeric `avg_time_per_patient` input per doctor row (blank = inherit clinic default). Persist via existing `doctors` update.
-- **Add Patient / Reschedule forms**: make `doctor_id` mandatory (required select, no "unassigned" option). Block submit if empty.
+## 6. Global send-message pipeline
+- **Remove**: `clinic_settings.whatsapp_tunnel_url`, `app_settings.whatsapp_tunnel_url`, admin route `src/routes/_authenticated/admin/whatsapp.tsx`, admin nav link, `clinic_settings` table (obsolete), `getGlobalTunnelUrl()`, all localhost/ngrok/`Bypass-Tunnel-Reminder` logic.
+- Rewrite `src/lib/whatsapp.functions.ts` `postToTunnel()` → `postToGateway(clinicId, phone10, message)` that POSTs to `http://15.207.87.63:3000/send-message` with `{ clinicId, phone: "91"+phone10, message }`.
+- Gate every automated send: load `clinics.whatsapp_connected` first; if false, skip and return `{ ok:false, reason:"not_connected" }`.
+- Update `src/routes/api/public/hooks/whatsapp-reminders.ts` and `renewal-reminders.ts` similarly (per-clinic gating).
 
-### Block 4 — Dashboard queue logic (`_authenticated/dashboard.tsx`)
+## 7. "Patient Messaging" tab (warm-connect)
+- New tab on dashboard: **Patient Messaging**.
+- Fields: phone (10-digit) + fixed disabled preview of the exact message.
+- Button **Send Initial Connect Message** → new server fn `sendWarmConnect({ phone })` (uses `requireSupabaseAuth`, resolves caller's `clinic_id`, checks `whatsapp_connected`, POSTs to `/send-message` with exact text: `"Hello! This is your clinic. We will be using this number to send your appointment updates and queue status. Please reply with 'ok' to confirm you have received this message."`).
+- Toast success/error.
 
-- **Sorting**: queue rows sorted strictly by `appointment_time ASC` (then `created_at` tiebreak). Display token = `index + 1` of the sorted filtered list (per doctor per day). Stored `token_number` becomes a fallback only.
-- **Insert between slots**: Add Patient supports arbitrary `appointment_time`; on save, chronological sort auto-recomputes display tokens for all subsequent rows. No manual renumber UI needed.
-- **Double-booking guard**: pre-check on submit + surface Postgres unique-violation as a toast ("This slot is already booked for this doctor").
-- **Row edits**: keep inline editing of name/time; time edits re-run double-booking check.
-- **Remove per-row "Doctor Arrived"** button from `DoctorControlCard` / row cards. Consolidate into a single **Global Doctor Controls** panel at top of dashboard (one card per active doctor, single "Doctor Arrived" button, existing per-doctor avg-time editor stays).
+## Files touched
+- Migration (columns + policy tweak + drop `clinic_settings` + drop `app_settings.whatsapp_tunnel_url`).
+- `src/routes/auth.tsx` (label + required).
+- `src/components/TimeSelect.tsx` (10-min).
+- `src/lib/whatsapp.functions.ts` (rewrite gateway, add `connectWhatsApp`, `sendWarmConnect`).
+- `src/components/WhatsAppSetupCard.tsx` (new).
+- `src/routes/_authenticated/dashboard.tsx` (mount setup card + Patient Messaging tab + remove any WhatsApp-tunnel UI).
+- `src/routes/api/public/hooks/whatsapp-reminders.ts` (use gateway + per-clinic gate).
+- Delete `src/routes/_authenticated/admin/whatsapp.tsx` + admin nav entry.
+- `bun add react-qr-code`.
 
-### Block 5 — Shift Status & Delay panel
-
-- New **"Daily Shift"** tab/panel at dashboard level, one section per active doctor for today.
-  - **Confirm On-Time** and **Declare Delay (minutes)** buttons.
-  - Enabled only if `now() <= firstAppointmentToday - 45min` per doctor; otherwise disabled with tooltip.
-  - On **Delay**: (a) insert `doctor_shift_status` row; (b) UPDATE all today's waiting tokens for that doctor: `appointment_time = appointment_time + delay`; (c) trigger WhatsApp update to every affected patient via existing capped sender (see Block 7); (d) toast summary.
-  - On **On-Time**: insert status row + optional confirmation broadcast (subject to 7-msg cap).
-
-### Block 6 — Centralized WhatsApp gateway
-
-- Remove **WhatsApp Settings** dialog / tunnel URL field from the receptionist dashboard entirely.
-- New **Super Admin** route `/_authenticated/admin/whatsapp` (gated by `has_role(uid,'super_admin')`; non-admins redirected). Single input to set `app_settings.whatsapp_tunnel_url`.
-- `src/lib/whatsapp.functions.ts` + `src/routes/api/public/hooks/whatsapp-reminders.ts` refactor: replace per-clinic `clinic_settings.tunnel_url` lookup with a single read of `app_settings.whatsapp_tunnel_url`. Skip send + log when unset.
-
-### Block 7 — Message payload rules
-
-Rewrite `buildMessage` variants in `whatsapp.functions.ts`:
-- **Message 1 (Confirmation)**: include patient name, `Dr. [Name] ([Specialty])`, `Date`, `Time`, `Full Clinic Address / Google Map Link` from `clinics.address`. **No token number**. Include tentative-time disclaimer.
-- **All other messages** (reminder, doctor arrived, token update, delay update):
-  - Always print Date + Time.
-  - Include **Running Token Number** (current in-treatment token from today's queue for that doctor) and the patient's **Latest Dynamic Token** (recomputed chronological index).
-  - Include standardized disclaimer: "All stated times are tentative appointment times and may shift with live queue movement."
-  - Delay flow fans out immediately to all affected patients (respecting 7-msg cap + adaptive 3 token-update cap).
-
-### Block 8 — Subscription/Trial + renewal reminder
-
-- Trial default = **21 days** (schema default + `handle_new_user`).
-- **Pricing calculator** utility (`src/lib/pricing.ts`): `monthlyFee = 499 * max(activeDoctorCount, 1)`. Displayed on a new **Billing** panel on the dashboard (read-only preview; no payment integration this pass unless requested).
-- **Renewal cron** (see Block 1): daily 09:00, POSTs to `/api/public/hooks/renewal-reminders`. Handler inserts `platform_notifications` rows for clinics whose renewal is 7 days out (idempotent via unique `(clinic_id, kind, target_date)`).
-- Dashboard header shows a **bell** with unread `platform_notifications` count + dropdown list.
-
-### Block 9 — Feedback loop
-
-- **Receptionist**: floating "Suggestions/Feedback" button on every `_authenticated` page → modal with single multi-line textarea → INSERT into `feedback`.
-- **Super Admin**: `/_authenticated/admin/feedback` page — chronological list grouped by Clinic → user role → date, showing message text. Read-only.
-
-### Technical notes
-
-- One migration handles all schema (user_roles, app_settings, feedback, doctor_shift_status, platform_notifications, tokens unique index, clinic_settings.tunnel_url drop, trial 21d default, handle_new_user update, cron job + endpoints). Grants + RLS per project rules; `has_role` used for all admin gating.
-- No stored token renumber trigger; display tokens computed in the client + in message payloads from the sorted list. Legacy `token_number` column retained for compatibility (nullable henceforth).
-- Super Admin role must be granted manually to your account after the migration lands — I'll surface the exact `INSERT` for you to run via the data tool when the migration is approved.
-- Existing `whatsapp-reminders` cron endpoint stays; its tunnel lookup switches to `app_settings`.
-- No payment provider is enabled in this pass — pricing tier is display-only. If you want live billing (Stripe/Paddle), that's a separate follow-up.
-
-Ready to proceed? On approval I'll ship the migration first, then Blocks 2→9 in code.
+## Notes / risks
+- **Mixed content**: gateway is plain HTTP. All calls go through server functions; no browser → `http://…` fetch. If you later want browser-direct calls, the AWS host needs HTTPS (Caddy / ALB + ACM).
+- **Auth**: gateway endpoints are unauthenticated per your spec — anyone with the URL + a clinicId could send. If that matters, add a shared secret header on the AWS side and store it as a Lovable Cloud secret; I can wire it up on request.
+- Super-admin UI to edit `subscription_rate` per clinic isn't in your spec — column will exist, editable via SQL for now. Say the word and I'll add an admin screen.
