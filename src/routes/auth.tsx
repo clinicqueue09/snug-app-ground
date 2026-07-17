@@ -80,7 +80,7 @@ function AuthPage() {
         data: {
           clinic_name: clinicName.trim(),
           clinic_address: clinicAddress.trim(),
-          clinic_mobile: clinicMobile.trim() || null,
+          clinic_mobile: clinicMobile.trim(),
         },
       },
     });
