@@ -71,7 +71,7 @@ function AuthPage() {
     setTouched(true);
     if (!clinicName.trim()) return toast.error("Clinic name is required.");
     if (!clinicAddress.trim()) return toast.error("Full Clinic Address / Google Map Link is required.");
-    if (!mobileValid) return toast.error("Clinic mobile must be exactly 10 digits.");
+    if (!mobileValid) return toast.error("Clinic WhatsApp mobile must be exactly 10 digits.");
     setLoading(true);
     const { error } = await supabase.auth.signUp({
       email, password,
