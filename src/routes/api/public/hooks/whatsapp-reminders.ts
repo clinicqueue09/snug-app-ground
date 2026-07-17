@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+const GATEWAY_BASE = "http://15.207.87.63:3000";
 const DISCLAIMER = "Note: All stated times are tentative appointment times and may shift with live queue movement.";
 const MAX_TOTAL_MESSAGES = 7;
 
@@ -22,13 +23,12 @@ function combineDT(dateISO: string, time: string | null): Date | null {
   d.setHours(h, m, 0, 0);
   return d;
 }
-async function postToTunnel(tunnelUrl: string, phone10: string, message: string) {
+async function postToGateway(clinicId: string, phone10: string, message: string) {
   try {
-    const endpoint = tunnelUrl.replace(/\/+$/, "") + "/send-message";
-    const res = await fetch(endpoint, {
+    const res = await fetch(`${GATEWAY_BASE}/send-message`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
-      body: JSON.stringify({ phone: `91${phone10}`, message }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clinicId, phone: `91${phone10}`, message }),
     });
     return res.ok;
   } catch { return false; }
@@ -39,11 +39,6 @@ export const Route = createFileRoute("/api/public/hooks/whatsapp-reminders")({
     handlers: {
       POST: async () => {
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-        // Global tunnel URL
-        const { data: appSettings } = await supabaseAdmin.from("app_settings").select("whatsapp_tunnel_url").eq("id", "global").maybeSingle();
-        const tunnelUrl = ((appSettings as any)?.whatsapp_tunnel_url ?? "").trim();
-        if (!tunnelUrl) return new Response(JSON.stringify({ ok: true, sent: 0, note: "gateway not configured" }), { headers: { "Content-Type": "application/json" } });
 
         const now = Date.now();
         const windowStart = new Date(now + (24 * 60 - 15) * 60_000);
@@ -65,7 +60,7 @@ export const Route = createFileRoute("/api/public/hooks/whatsapp-reminders")({
         const doctorIds = Array.from(new Set(tokens.map((t: any) => t.doctor_id).filter(Boolean)));
 
         const [clinicsRes, doctorsRes] = await Promise.all([
-          supabaseAdmin.from("clinics").select("id, name, address, clinic_mobile").in("id", clinicIds),
+          supabaseAdmin.from("clinics").select("id, name, address, clinic_mobile, whatsapp_connected").in("id", clinicIds),
           doctorIds.length
             ? supabaseAdmin.from("doctors").select("id, name, specialty").in("id", doctorIds)
             : Promise.resolve({ data: [] as any[], error: null }),
@@ -82,15 +77,15 @@ export const Route = createFileRoute("/api/public/hooks/whatsapp-reminders")({
           if ((t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) continue;
 
           const clinic = clinicMap.get(t.clinic_id) as any;
+          if (!clinic || !clinic.whatsapp_connected) continue;
           const doctor = t.doctor_id ? (doctorMap.get(t.doctor_id) as any) : null;
-          if (!clinic) continue;
 
           const contact = clinic.clinic_mobile ? ` Contact: ${clinic.clinic_mobile}.` : "";
           const doc = doctorLabel(doctor?.name ?? "your doctor", doctor?.specialty ?? null);
           const timeStr = fmtTime12(t.appointment_time);
           const message = `Hello ${t.patient_name}, reminder — your appointment at ${clinic.name} with ${doc} is tomorrow.\nDate: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}\nYour latest token: #${t.token_number}.\nFull Clinic Address / Google Map Link: ${clinic.address}.${contact}\n\n${DISCLAIMER}`;
 
-          const ok = await postToTunnel(tunnelUrl, t.phone_number, message);
+          const ok = await postToGateway(t.clinic_id, t.phone_number, message);
           if (!ok) continue;
           await (supabaseAdmin.from("tokens") as any).update({
             whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
