@@ -27,7 +27,7 @@ export function formatDisplay(value: string | null | undefined): string {
 }
 
 const HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1));
-const MINUTES = ["00", "15", "30", "45"];
+const MINUTES = ["00", "10", "20", "30", "40", "50"];
 
 export function TimeSelect({
   hour, minute, meridiem, onChange, compact,
