@@ -53,6 +53,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { TimeSelect, to24h, parse24h, formatDisplay } from "@/components/TimeSelect";
+import { WhatsAppSetupCard, WarmConnectCard } from "@/components/WhatsAppSetupCard";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
