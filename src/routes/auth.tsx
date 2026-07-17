@@ -141,10 +141,11 @@ function AuthPage() {
                     <Input id="su-caddr" required value={clinicAddress} onChange={(e) => setClinicAddress(e.target.value)} placeholder="123 Main St, City / https://maps.google.com/…" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="su-cmob">Clinic Mobile (optional)</Label>
+                    <Label htmlFor="su-cmob">Clinic Mobile (Whatsapp Number only) <span className="text-rose-500">*</span></Label>
                     <Input
                       id="su-cmob"
                       inputMode="numeric"
+                      required
                       value={clinicMobile}
                       onChange={(e) => setClinicMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       placeholder="10 digits"
