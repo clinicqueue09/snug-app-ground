@@ -48,7 +48,7 @@ function AuthPage() {
   const [clinicAddress, setClinicAddress] = useState("");
   const [clinicMobile, setClinicMobile] = useState("");
   const [touched, setTouched] = useState(false);
-  const mobileValid = clinicMobile === "" || /^[0-9]{10}$/.test(clinicMobile);
+  const mobileValid = /^[0-9]{10}$/.test(clinicMobile);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
