@@ -274,7 +274,7 @@ function Dashboard() {
             <ManageDoctorsDialog doctors={doctors} clinicId={clinic?.id} onChange={loadAll} />
             {isAdmin && (
               <Link
-                to="/admin/whatsapp"
+                to="/admin/feedback"
                 className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 px-3 py-1.5 text-xs font-medium"
               >
                 <Shield className="h-3.5 w-3.5" /> Admin
