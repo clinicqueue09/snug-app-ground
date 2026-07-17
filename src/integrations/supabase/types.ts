@@ -18,45 +18,16 @@ export type Database = {
         Row: {
           id: string
           updated_at: string
-          whatsapp_tunnel_url: string | null
         }
         Insert: {
           id?: string
           updated_at?: string
-          whatsapp_tunnel_url?: string | null
         }
         Update: {
           id?: string
           updated_at?: string
-          whatsapp_tunnel_url?: string | null
         }
         Relationships: []
-      }
-      clinic_settings: {
-        Row: {
-          clinic_id: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          clinic_id: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          clinic_id?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "clinic_settings_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: true
-            referencedRelation: "clinics"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       clinics: {
         Row: {
@@ -67,8 +38,10 @@ export type Database = {
           id: string
           name: string
           status: string
+          subscription_rate: number
           trial_ends_at: string
           updated_at: string
+          whatsapp_connected: boolean
         }
         Insert: {
           address: string
@@ -78,8 +51,10 @@ export type Database = {
           id?: string
           name?: string
           status?: string
+          subscription_rate?: number
           trial_ends_at?: string
           updated_at?: string
+          whatsapp_connected?: boolean
         }
         Update: {
           address?: string
@@ -89,8 +64,10 @@ export type Database = {
           id?: string
           name?: string
           status?: string
+          subscription_rate?: number
           trial_ends_at?: string
           updated_at?: string
+          whatsapp_connected?: boolean
         }
         Relationships: []
       }

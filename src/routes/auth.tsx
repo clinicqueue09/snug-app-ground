@@ -48,7 +48,7 @@ function AuthPage() {
   const [clinicAddress, setClinicAddress] = useState("");
   const [clinicMobile, setClinicMobile] = useState("");
   const [touched, setTouched] = useState(false);
-  const mobileValid = clinicMobile === "" || /^[0-9]{10}$/.test(clinicMobile);
+  const mobileValid = /^[0-9]{10}$/.test(clinicMobile);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -71,7 +71,7 @@ function AuthPage() {
     setTouched(true);
     if (!clinicName.trim()) return toast.error("Clinic name is required.");
     if (!clinicAddress.trim()) return toast.error("Full Clinic Address / Google Map Link is required.");
-    if (!mobileValid) return toast.error("Clinic mobile must be exactly 10 digits.");
+    if (!mobileValid) return toast.error("Clinic WhatsApp mobile must be exactly 10 digits.");
     setLoading(true);
     const { error } = await supabase.auth.signUp({
       email, password,
@@ -80,7 +80,7 @@ function AuthPage() {
         data: {
           clinic_name: clinicName.trim(),
           clinic_address: clinicAddress.trim(),
-          clinic_mobile: clinicMobile.trim() || null,
+          clinic_mobile: clinicMobile.trim(),
         },
       },
     });
@@ -141,10 +141,11 @@ function AuthPage() {
                     <Input id="su-caddr" required value={clinicAddress} onChange={(e) => setClinicAddress(e.target.value)} placeholder="123 Main St, City / https://maps.google.com/…" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="su-cmob">Clinic Mobile (optional)</Label>
+                    <Label htmlFor="su-cmob">Clinic Mobile (Whatsapp Number only) <span className="text-rose-500">*</span></Label>
                     <Input
                       id="su-cmob"
                       inputMode="numeric"
+                      required
                       value={clinicMobile}
                       onChange={(e) => setClinicMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       placeholder="10 digits"

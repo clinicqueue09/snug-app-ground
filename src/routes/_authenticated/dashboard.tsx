@@ -53,6 +53,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { TimeSelect, to24h, parse24h, formatDisplay } from "@/components/TimeSelect";
+import { WhatsAppSetupCard, WarmConnectCard } from "@/components/WhatsAppSetupCard";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -66,6 +67,7 @@ type Clinic = {
   address: string;
   clinic_mobile: string | null;
   avg_time_per_patient: number;
+  whatsapp_connected: boolean;
 };
 type Doctor = { id: string; name: string; specialty: string | null; avg_time_per_patient: number | null };
 type Token = {
@@ -147,7 +149,7 @@ function Dashboard() {
     const [c, d, t, n] = await Promise.all([
       supabase
         .from("clinics")
-        .select("id,name,status,trial_ends_at,address,clinic_mobile,avg_time_per_patient")
+        .select("id,name,status,trial_ends_at,address,clinic_mobile,avg_time_per_patient,whatsapp_connected")
         .limit(1)
         .maybeSingle(),
       supabase.from("doctors").select("id,name,specialty,avg_time_per_patient").eq("is_active", true).order("name"),
@@ -273,7 +275,7 @@ function Dashboard() {
             <ManageDoctorsDialog doctors={doctors} clinicId={clinic?.id} onChange={loadAll} />
             {isAdmin && (
               <Link
-                to="/admin/whatsapp"
+                to="/admin/feedback"
                 className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 px-3 py-1.5 text-xs font-medium"
               >
                 <Shield className="h-3.5 w-3.5" /> Admin
@@ -322,6 +324,14 @@ function Dashboard() {
             }
           }}
         />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <WhatsAppSetupCard
+            clinicId={clinic?.id}
+            connected={Boolean(clinic?.whatsapp_connected)}
+            onChange={loadAll}
+          />
+          <WarmConnectCard disabled={trialExpired || !clinic?.whatsapp_connected} />
+        </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -1,10 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+const GATEWAY_BASE = "http://15.207.87.63:3000";
 const MAX_TOTAL_MESSAGES = 7;
 const MAX_TOKEN_UPDATES = 3;
 const DISCLAIMER =
   "Note: All stated times are tentative appointment times and may shift with live queue movement.";
+const WARM_CONNECT_TEXT =
+  "Hello! This is your clinic. We will be using this number to send your appointment updates and queue status. Please reply with 'ok' to confirm you have received this message.";
 
 type Variant =
   | "confirmation"
@@ -34,7 +37,7 @@ export function buildMessage(params: {
   doctorName: string;
   doctorSpecialty: string | null;
   clinicName: string;
-  clinicAddress: string; // "Full Clinic Address / Google Map Link"
+  clinicAddress: string;
   clinicMobile: string | null;
   date: string;
   time: string | null;
@@ -58,7 +61,6 @@ export function buildMessage(params: {
 
   switch (params.variant) {
     case "confirmation":
-      // Per spec: date, time, full address / map link. NO token numbers.
       return `${base} your appointment at ${params.clinicName} with ${doc} is confirmed.\n${dt}\n${location}\n\n${DISCLAIMER}`;
     case "reminder_24h":
       return `${base} reminder — your appointment at ${params.clinicName} with ${doc} is tomorrow.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
@@ -82,23 +84,24 @@ export function buildMessage(params: {
   }
 }
 
-async function postToTunnel(tunnelUrl: string, phone10: string, message: string) {
-  const endpoint = tunnelUrl.replace(/\/+$/, "") + "/send-message";
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
-    body: JSON.stringify({ phone: `91${phone10}`, message }),
-  });
-  return { ok: res.ok, status: res.status };
+async function postToGateway(clinicId: string, phone10: string, message: string) {
+  try {
+    const res = await fetch(`${GATEWAY_BASE}/send-message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clinicId, phone: `91${phone10}`, message }),
+    });
+    return { ok: res.ok, status: res.status };
+  } catch (e: any) {
+    return { ok: false, status: 0, error: e?.message ?? "network error" };
+  }
 }
 
-async function getGlobalTunnelUrl(supabase: any): Promise<string | null> {
-  const { data } = await supabase.from("app_settings").select("whatsapp_tunnel_url").eq("id", "global").maybeSingle();
-  const url = (data as any)?.whatsapp_tunnel_url?.trim();
-  return url || null;
+async function clinicIsConnected(supabase: any, clinicId: string): Promise<boolean> {
+  const { data } = await supabase.from("clinics").select("whatsapp_connected").eq("id", clinicId).maybeSingle();
+  return Boolean((data as any)?.whatsapp_connected);
 }
 
-// Compute per-doctor per-day chronological display tokens (index + 1) and running token.
 async function computeQueueContext(
   supabase: any,
   clinicId: string,
@@ -133,12 +136,13 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
     const { supabase } = context;
 
     const { data: tokenRow, error: tokErr } = await supabase
-      .from("tokens")
-      .select("*")
-      .eq("id", data.tokenId)
-      .maybeSingle();
+      .from("tokens").select("*").eq("id", data.tokenId).maybeSingle();
     if (tokErr || !tokenRow) return { ok: false as const, error: tokErr?.message ?? "Token not found" };
     const t = tokenRow as any;
+
+    if (!(await clinicIsConnected(supabase, t.clinic_id))) {
+      return { ok: false as const, error: "WhatsApp not connected for this clinic" };
+    }
 
     if ((t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) {
       return { ok: false as const, error: `Message cap reached (${MAX_TOTAL_MESSAGES}/patient).` };
@@ -158,16 +162,14 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
       return { ok: false as const, error: `Token-update cap reached (${MAX_TOKEN_UPDATES}/patient).` };
     }
 
-    const [clinicRes, doctorRes, tunnelUrl] = await Promise.all([
+    const [clinicRes, doctorRes] = await Promise.all([
       supabase.from("clinics").select("name, address, clinic_mobile").eq("id", t.clinic_id).maybeSingle(),
       t.doctor_id
         ? supabase.from("doctors").select("name, specialty").eq("id", t.doctor_id).maybeSingle()
         : Promise.resolve({ data: null as any, error: null }),
-      getGlobalTunnelUrl(supabase),
     ]);
     const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null }) as any;
     const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
-    if (!tunnelUrl) return { ok: false as const, error: "WhatsApp gateway not configured" };
 
     const ctx = await computeQueueContext(supabase, t.clinic_id, t.doctor_id, t.appointment_date);
     const latest = ctx.displayToken.get(t.id) ?? t.token_number ?? null;
@@ -187,7 +189,7 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
       tentativeTime: data.tentativeTime ?? null,
     });
 
-    const result = await postToTunnel(tunnelUrl, t.phone_number, message);
+    const result = await postToGateway(t.clinic_id, t.phone_number, message);
     if (!result.ok) return { ok: false as const, status: result.status, error: `Send failed (${result.status})` };
 
     const patch: Record<string, unknown> = {
@@ -220,14 +222,17 @@ export const sendDoctorArrivedForDoctor = createServerFn({ method: "POST" })
     if (!rows || rows.length === 0) return { ok: true as const, sent: 0 };
 
     const clinicId = (rows[0] as any).clinic_id as string;
-    const [clinicRes, doctorRes, tunnelUrl] = await Promise.all([
+
+    if (!(await clinicIsConnected(supabase, clinicId))) {
+      return { ok: false as const, error: "WhatsApp not connected for this clinic" };
+    }
+
+    const [clinicRes, doctorRes] = await Promise.all([
       supabase.from("clinics").select("name, address, clinic_mobile").eq("id", clinicId).maybeSingle(),
       supabase.from("doctors").select("name, specialty").eq("id", data.doctorId).maybeSingle(),
-      getGlobalTunnelUrl(supabase),
     ]);
     const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null }) as any;
     const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
-    if (!tunnelUrl) return { ok: false as const, error: "WhatsApp gateway not configured" };
 
     const ctx = await computeQueueContext(supabase, clinicId, data.doctorId, todayISO);
 
@@ -249,7 +254,7 @@ export const sendDoctorArrivedForDoctor = createServerFn({ method: "POST" })
         runningTokenNumber: ctx.runningTokenNumber,
         latestTokenNumber: latest,
       });
-      const res = await postToTunnel(tunnelUrl, t.phone_number, msg);
+      const res = await postToGateway(clinicId, t.phone_number, msg);
       if (!res.ok) continue;
       await (supabase.from("tokens") as any).update({
         whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
@@ -335,10 +340,6 @@ export const advanceQueueNotifications = createServerFn({ method: "POST" })
     return { ok: true as const, queued, results };
   });
 
-/**
- * Shift status: shifts today's waiting tokens forward by delayMinutes for the
- * doctor and dispatches a shift_update WhatsApp to all affected patients.
- */
 export const applyDoctorShiftStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { doctorId: string; status: "on_time" | "delayed"; delayMinutes?: number }) => input)
@@ -349,7 +350,6 @@ export const applyDoctorShiftStatus = createServerFn({ method: "POST" })
     const delayMinutes = data.status === "delayed" ? Math.max(1, Math.min(480, Math.floor(data.delayMinutes ?? 0))) : 0;
     if (data.status === "delayed" && delayMinutes === 0) return { ok: false as const, error: "Delay minutes required" };
 
-    // Load doctor's waiting tokens today
     const { data: rows } = await supabase
       .from("tokens")
       .select("id, clinic_id, doctor_id, patient_name, phone_number, token_number, appointment_date, appointment_time, whatsapp_messages_sent, created_at")
@@ -359,7 +359,6 @@ export const applyDoctorShiftStatus = createServerFn({ method: "POST" })
     const tokens = (rows as any[]) ?? [];
     if (tokens.length === 0) return { ok: false as const, error: "No waiting patients today for this doctor" };
 
-    // 45-min-before-first check
     const sorted = tokens.slice().sort((a, b) => (a.appointment_time ?? "").localeCompare(b.appointment_time ?? ""));
     const first = sorted[0].appointment_time as string | null;
     if (!first || !/^\d{1,2}:\d{2}$/.test(first)) return { ok: false as const, error: "First appointment has no valid time" };
@@ -369,14 +368,12 @@ export const applyDoctorShiftStatus = createServerFn({ method: "POST" })
     if (now > cutoff) return { ok: false as const, error: "Must submit at least 45 minutes before the first appointment" };
 
     const clinicId = tokens[0].clinic_id as string;
-    // Log shift status
     await (supabase.from("doctor_shift_status") as any)
       .upsert({
         clinic_id: clinicId, doctor_id: data.doctorId, shift_date: todayISO,
         status: data.status, delay_minutes: delayMinutes, created_by: userId,
       }, { onConflict: "doctor_id,shift_date" });
 
-    // If delayed, shift appointment_time forward
     if (delayMinutes > 0) {
       for (const t of tokens) {
         if (!t.appointment_time) continue;
@@ -388,17 +385,16 @@ export const applyDoctorShiftStatus = createServerFn({ method: "POST" })
       }
     }
 
-    // Broadcast shift_update to all affected patients
-    const [clinicRes, doctorRes, tunnelUrl] = await Promise.all([
+    const connected = await clinicIsConnected(supabase, clinicId);
+    const [clinicRes, doctorRes] = await Promise.all([
       supabase.from("clinics").select("name, address, clinic_mobile").eq("id", clinicId).maybeSingle(),
       supabase.from("doctors").select("name, specialty").eq("id", data.doctorId).maybeSingle(),
-      getGlobalTunnelUrl(supabase),
     ]);
     const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null }) as any;
     const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
 
     let sent = 0;
-    if (tunnelUrl) {
+    if (connected) {
       const ctx = await computeQueueContext(supabase, clinicId, data.doctorId, todayISO);
       for (const t of tokens) {
         if ((t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) continue;
@@ -418,7 +414,7 @@ export const applyDoctorShiftStatus = createServerFn({ method: "POST" })
           tentativeTime: t.appointment_time ? fmtTime12(t.appointment_time) : null,
           delayMinutes,
         });
-        const res = await postToTunnel(tunnelUrl, t.phone_number, msg);
+        const res = await postToGateway(clinicId, t.phone_number, msg);
         if (!res.ok) continue;
         await (supabase.from("tokens") as any).update({
           whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
@@ -427,5 +423,58 @@ export const applyDoctorShiftStatus = createServerFn({ method: "POST" })
       }
     }
 
-    return { ok: true as const, sent, shifted: delayMinutes > 0 ? tokens.length : 0, gatewayConfigured: Boolean(tunnelUrl) };
+    return { ok: true as const, sent, shifted: delayMinutes > 0 ? tokens.length : 0, gatewayConfigured: connected };
+  });
+
+/**
+ * Server-side proxy to the AWS gateway /connect endpoint. Also mirrors
+ * `already_connected` status into the clinics table.
+ */
+export const connectWhatsApp = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { clinicId: string }) => input)
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    try {
+      const res = await fetch(`${GATEWAY_BASE}/connect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clinicId: data.clinicId }),
+      });
+      const text = await res.text();
+      let body: any = {};
+      try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text }; }
+
+      if (body?.status === "already_connected") {
+        await (supabase.from("clinics") as any).update({ whatsapp_connected: true }).eq("id", data.clinicId);
+      }
+      return { ok: res.ok, status: res.status, body };
+    } catch (e: any) {
+      return { ok: false as const, status: 0, error: e?.message ?? "network error" };
+    }
+  });
+
+/**
+ * Warm-connect / test initial message. Uses the exact required text.
+ */
+export const sendWarmConnectMessage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { phone: string }) => input)
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const phone10 = (data.phone ?? "").replace(/\D/g, "").slice(-10);
+    if (!/^[0-9]{10}$/.test(phone10)) return { ok: false as const, error: "Enter a valid 10-digit phone number" };
+
+    const { data: recep } = await supabase
+      .from("receptionists").select("clinic_id").eq("user_id", userId).maybeSingle();
+    const clinicId = (recep as any)?.clinic_id as string | undefined;
+    if (!clinicId) return { ok: false as const, error: "No clinic linked to your account" };
+
+    if (!(await clinicIsConnected(supabase, clinicId))) {
+      return { ok: false as const, error: "Link WhatsApp first from the WhatsApp Setup section." };
+    }
+
+    const res = await postToGateway(clinicId, phone10, WARM_CONNECT_TEXT);
+    if (!res.ok) return { ok: false as const, status: res.status, error: `Send failed (${res.status})` };
+    return { ok: true as const, status: res.status };
   });
