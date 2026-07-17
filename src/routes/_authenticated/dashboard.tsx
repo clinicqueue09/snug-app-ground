@@ -148,7 +148,7 @@ function Dashboard() {
     const [c, d, t, n] = await Promise.all([
       supabase
         .from("clinics")
-        .select("id,name,status,trial_ends_at,address,clinic_mobile,avg_time_per_patient")
+        .select("id,name,status,trial_ends_at,address,clinic_mobile,avg_time_per_patient,whatsapp_connected")
         .limit(1)
         .maybeSingle(),
       supabase.from("doctors").select("id,name,specialty,avg_time_per_patient").eq("is_active", true).order("name"),
