@@ -66,6 +66,7 @@ type Clinic = {
   address: string;
   clinic_mobile: string | null;
   avg_time_per_patient: number;
+  whatsapp_connected: boolean;
 };
 type Doctor = { id: string; name: string; specialty: string | null; avg_time_per_patient: number | null };
 type Token = {
