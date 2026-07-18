@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 const GATEWAY_BASE = "http://15.207.87.63:3000";
+const SIGNATURE = "— Powered by ClinicQ";
 const DISCLAIMER = "Note: All stated times are tentative appointment times and may shift with live queue movement.";
 const MAX_TOTAL_MESSAGES = 7;
 
