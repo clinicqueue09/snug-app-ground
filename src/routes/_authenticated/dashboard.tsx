@@ -1628,14 +1628,22 @@ function FeedbackTray({ onSubmit }: { onSubmit: (message: string) => Promise<voi
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <button
-          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-sky-600 hover:bg-sky-700 text-white px-4 py-3 shadow-lg text-sm font-medium"
-          aria-label="Open feedback"
-        >
-          <MessageCircle className="h-4 w-4" /> Suggestions / Feedback
-        </button>
-      </DialogTrigger>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                className="fixed bottom-6 right-6 z-40 inline-flex items-center justify-center h-11 w-11 rounded-full bg-teal-600 hover:bg-teal-700 text-white shadow-lg ring-2 ring-white/60"
+                aria-label="Suggestions / Feedback"
+              >
+                <MessageCircle className="h-5 w-5" />
+              </button>
+            </DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="left">Suggestions / Feedback</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Suggestions / Feedback</DialogTitle>
