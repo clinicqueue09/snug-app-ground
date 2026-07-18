@@ -875,6 +875,7 @@ function AddPatientCard({
     if (!hour || !minute) return toast.error("Pick an appointment time");
     // Block past date-times (validated in local clinic time)
     const apptTime24 = to24h(hour, minute, meridiem);
+    if (!apptTime24) return toast.error("Pick a valid appointment time");
     const [ah, am] = apptTime24.split(":").map((n) => parseInt(n, 10));
     const apptDT = new Date(date);
     apptDT.setHours(ah, am, 0, 0);
