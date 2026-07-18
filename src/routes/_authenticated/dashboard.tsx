@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  sendWhatsAppMessage,
+  notifyPatient,
   advanceQueueNotifications,
   sendDoctorArrivedForDoctor,
   applyDoctorShiftStatus,
@@ -140,7 +140,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [doctorFilter, setDoctorFilter] = useState<string>("all");
 
-  const sendWhatsApp = useServerFn(sendWhatsAppMessage);
+  const notify = useServerFn(notifyPatient);
   const advanceQueue = useServerFn(advanceQueueNotifications);
   const sendDoctorArrived = useServerFn(sendDoctorArrivedForDoctor);
   const applyShift = useServerFn(applyDoctorShiftStatus);
@@ -205,8 +205,9 @@ function Dashboard() {
       const res = await advanceQueue({ data: { doctorId: t.doctor_id, appointmentDate: t.appointment_date } });
       if (res.ok && res.queued && res.queued.length > 0) {
         for (const q of res.queued) {
-          const r = await sendWhatsApp({
-            data: { tokenId: q.tokenId, variant: q.variant, tentativeTime: q.tentativeTime },
+          const messageType = q.variant === "next_in_line" ? "next_in_line" : "queue_update";
+          const r = await notify({
+            data: { tokenId: q.tokenId, messageType, tentativeTime: q.tentativeTime },
           });
           if (!r.ok && r.error) console.warn("[whatsapp]", r.error);
         }
@@ -363,8 +364,8 @@ function Dashboard() {
             disabled={trialExpired}
             onAdded={async (createdToken) => {
               await loadAll();
-              const res = await sendWhatsApp({ data: { tokenId: createdToken.id, variant: "confirmation" } });
-              if (res.ok) toast.success("WhatsApp confirmation sent");
+              const res = await notify({ data: { tokenId: createdToken.id, messageType: "confirmation" } });
+              if (res.ok) toast.success(res.channel === "sms" ? "SMS confirmation sent" : "WhatsApp confirmation sent");
               else if (res.error) toast.warning(res.error);
             }}
           />
