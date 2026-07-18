@@ -237,6 +237,19 @@ function Dashboard() {
   const todayTokens = sortAndTokenize(todayAll);
   const upcomingAll = tokens.filter((t) => t.appointment_date > today && t.status !== "cancelled");
   const upcomingTokens = sortAndTokenize(upcomingAll);
+  // 30-day history: past dates (excluding today), any status
+  const historyCutoff = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    d.setHours(0, 0, 0, 0);
+    return format(d, "yyyy-MM-dd");
+  })();
+  const historyAll = tokens
+    .filter((t) => t.appointment_date < today && t.appointment_date >= historyCutoff)
+    .filter(filterDoctor);
+  const historyTokens = sortAndTokenize(
+    historyAll.slice().sort((a, b) => b.appointment_date.localeCompare(a.appointment_date)),
+  );
 
   const unreadNotifs = notifs.filter((n) => !n.read_at).length;
 
