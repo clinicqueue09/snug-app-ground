@@ -84,6 +84,7 @@ type Token = {
   appointment_time: string | null;
   created_at: string;
   doctor_arrived_sent_at?: string | null;
+  reported_at?: string | null;
 };
 type PlatformNotification = {
   id: string;
