@@ -261,12 +261,21 @@ function Dashboard() {
       <header className="border-b border-slate-200 bg-white">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-10 w-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shadow-sm shrink-0">
-              <Stethoscope className="h-5 w-5" />
-            </div>
+            <img
+              src={logoUrl}
+              alt="ClinicQ logo"
+              width={40}
+              height={40}
+              className="h-10 w-10 rounded-xl shadow-sm shrink-0 bg-white object-contain"
+            />
             <div className="min-w-0">
-              <div className="font-semibold text-slate-900 leading-tight truncate">
-                {clinic?.name ?? "Clinic Queue"}
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="font-semibold text-slate-900 leading-tight truncate">
+                  {clinic?.name ?? "Clinic Queue"}
+                </span>
+                <span className="text-[11px] font-medium text-teal-700 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded">
+                  ClinicQ · Calm queues, happier patients
+                </span>
               </div>
               {clinic?.address && <div className="text-sm text-slate-600 truncate">{clinic.address}</div>}
               <div className="text-xs text-slate-500 truncate">{email}</div>
