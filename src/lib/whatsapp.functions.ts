@@ -66,25 +66,25 @@ export function buildMessage(params: {
 
   switch (params.variant) {
     case "confirmation":
-      return `${base} your appointment at ${params.clinicName} with ${doc} is confirmed.\n${dt}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} your appointment at ${params.clinicName} with ${doc} is confirmed.\n${dt}\n${location}\n\n${DISCLAIMER}`);
     case "reminder_24h":
-      return `${base} reminder — your appointment at ${params.clinicName} with ${doc} is tomorrow.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} reminder — your appointment at ${params.clinicName} with ${doc} is tomorrow.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     case "doctor_arrived":
-      return `${base} ${doc} has arrived at ${params.clinicName} and consultations are starting.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} ${doc} has arrived at ${params.clinicName} and consultations are starting.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     case "next_in_line":
-      return `${base} you are next in line for ${doc} at ${params.clinicName}. Please be ready.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} you are next in line for ${doc} at ${params.clinicName}. Please be ready.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     case "token_update": {
       const timing = params.tentativeTime
         ? `Your tentative time with ${doc} is now ${params.tentativeTime}.`
         : `Queue update from ${doc} at ${params.clinicName}.`;
-      return `${base} ${timing}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} ${timing}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     }
     case "shift_update": {
       const delay = params.delayMinutes && params.delayMinutes > 0
         ? `Doctor shift is delayed by ${params.delayMinutes} minutes.`
         : `Doctor shift is on time.`;
       const newTime = params.tentativeTime ? ` Your updated tentative time: ${params.tentativeTime}.` : "";
-      return `${base} ${delay}${newTime}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} ${delay}${newTime}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     }
   }
 }
