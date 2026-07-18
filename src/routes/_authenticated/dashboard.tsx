@@ -286,9 +286,6 @@ function Dashboard() {
                 <span className="font-semibold text-slate-900 leading-tight truncate">
                   {clinic?.name ?? "Clinic Queue"}
                 </span>
-                <span className="text-[11px] font-medium text-teal-700 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded">
-                  ClinicQ · Calm queues, happier patients
-                </span>
               </div>
               {clinic?.address && <div className="text-sm text-slate-600 truncate">{clinic.address}</div>}
               <div className="text-xs text-slate-500 truncate">{email}</div>
