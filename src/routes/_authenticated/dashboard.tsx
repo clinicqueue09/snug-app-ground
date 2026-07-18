@@ -32,7 +32,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import {
   LogOut,
-  Stethoscope,
+  Stethoscope as _Stethoscope,
   Clock,
   CheckCircle2,
   PlayCircle,
