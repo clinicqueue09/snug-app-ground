@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { sendSmsRaw } from "@/lib/sms.functions";
 
 const GATEWAY_BASE = "http://15.207.87.63:3000";
 const MAX_TOTAL_MESSAGES = 7;
@@ -7,8 +8,6 @@ const MAX_TOKEN_UPDATES = 3;
 const SIGNATURE = "— Powered by ClinicQ";
 const DISCLAIMER =
   "Note: All stated times are tentative appointment times and may shift with live queue movement.";
-const WARM_CONNECT_TEXT =
-  `Hello! This is your clinic. We will be using this number to send your appointment updates and queue status. Please reply with 'ok' to confirm you have received this message.\n\n${SIGNATURE}`;
 
 function withSig(msg: string) {
   return msg.trimEnd() + `\n\n${SIGNATURE}`;
