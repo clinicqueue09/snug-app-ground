@@ -460,6 +460,33 @@ export const connectWhatsApp = createServerFn({ method: "POST" })
   });
 
 /**
+ * GET-only status check. Polls gateway /status?clinicId=... without
+ * repeatedly hitting /connect (which can force new QR generation).
+ */
+export const checkWhatsAppStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { clinicId: string }) => input)
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    try {
+      const res = await fetch(`${GATEWAY_BASE}/status?clinicId=${encodeURIComponent(data.clinicId)}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      const text = await res.text();
+      let body: any = {};
+      try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text }; }
+      const connected = body?.status === "connected" || body?.status === "already_connected" || body?.connected === true;
+      if (connected) {
+        await (supabase.from("clinics") as any).update({ whatsapp_connected: true }).eq("id", data.clinicId);
+      }
+      return { ok: res.ok, status: res.status, connected, body };
+    } catch (e: any) {
+      return { ok: false as const, status: 0, connected: false, error: e?.message ?? "network error" };
+    }
+  });
+
+/**
  * Warm-connect / test initial message. Uses the exact required text.
  */
 export const sendWarmConnectMessage = createServerFn({ method: "POST" })
