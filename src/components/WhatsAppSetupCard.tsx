@@ -15,6 +15,7 @@ type Props = { clinicId: string | undefined; connected: boolean; onChange: () =>
 
 export function WhatsAppSetupCard({ clinicId, connected, onChange }: Props) {
   const connect = useServerFn(connectWhatsApp);
+  const checkStatus = useServerFn(checkWhatsAppStatus);
   const [qr, setQr] = useState<string | null>(null);
   const [status, setStatus] = useState<string>(connected ? "connected" : "idle");
   const [busy, setBusy] = useState(false);
