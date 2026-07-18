@@ -385,6 +385,10 @@ function Dashboard() {
                 <CalendarClock className="h-3.5 w-3.5" />
                 Upcoming
               </TabsTrigger>
+              <TabsTrigger value="history" className="gap-1.5">
+                <CalendarClock className="h-3.5 w-3.5" />
+                History (30d)
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="today" className="space-y-4">
