@@ -281,6 +281,7 @@ export type Database = {
           patient_name: string
           phone_number: string
           reminder_24h_sent_at: string | null
+          reported_at: string | null
           status: string
           token_number: number
           token_update_count: number
@@ -300,6 +301,7 @@ export type Database = {
           patient_name: string
           phone_number: string
           reminder_24h_sent_at?: string | null
+          reported_at?: string | null
           status?: string
           token_number: number
           token_update_count?: number
@@ -319,6 +321,7 @@ export type Database = {
           patient_name?: string
           phone_number?: string
           reminder_24h_sent_at?: string | null
+          reported_at?: string | null
           status?: string
           token_number?: number
           token_update_count?: number
