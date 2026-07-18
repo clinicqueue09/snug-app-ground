@@ -1,15 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "react-qr-code";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { connectWhatsApp, sendWarmConnectMessage, checkWhatsAppStatus } from "@/lib/whatsapp.functions";
-import { CheckCircle2, QrCode, RefreshCw, Send, Smartphone } from "lucide-react";
+import { connectWhatsApp, checkWhatsAppStatus } from "@/lib/whatsapp.functions";
+import { CheckCircle2, QrCode, RefreshCw, Smartphone } from "lucide-react";
 
 type Props = { clinicId: string | undefined; connected: boolean; onChange: () => void };
 
