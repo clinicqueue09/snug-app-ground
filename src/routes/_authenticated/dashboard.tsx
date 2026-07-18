@@ -53,7 +53,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { TimeSelect, to24h, parse24h, formatDisplay } from "@/components/TimeSelect";
-import { WhatsAppSetupCard, WarmConnectCard } from "@/components/WhatsAppSetupCard";
+import { WhatsAppSetupCard } from "@/components/WhatsAppSetupCard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import logoUrl from "@/assets/logo.png";
 
@@ -346,13 +346,12 @@ function Dashboard() {
             }
           }}
         />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <WhatsAppSetupCard
             clinicId={clinic?.id}
             connected={Boolean(clinic?.whatsapp_connected)}
             onChange={loadAll}
           />
-          <WarmConnectCard disabled={trialExpired || !clinic?.whatsapp_connected} />
         </div>
       </div>
 
