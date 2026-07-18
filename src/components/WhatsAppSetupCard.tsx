@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { connectWhatsApp, sendWarmConnectMessage } from "@/lib/whatsapp.functions";
+import { connectWhatsApp, sendWarmConnectMessage, checkWhatsAppStatus } from "@/lib/whatsapp.functions";
 import { CheckCircle2, QrCode, RefreshCw, Send, Smartphone } from "lucide-react";
 
 type Props = { clinicId: string | undefined; connected: boolean; onChange: () => void };
 
 export function WhatsAppSetupCard({ clinicId, connected, onChange }: Props) {
   const connect = useServerFn(connectWhatsApp);
+  const checkStatus = useServerFn(checkWhatsAppStatus);
   const [qr, setQr] = useState<string | null>(null);
   const [status, setStatus] = useState<string>(connected ? "connected" : "idle");
   const [busy, setBusy] = useState(false);
@@ -45,16 +46,13 @@ export function WhatsAppSetupCard({ clinicId, connected, onChange }: Props) {
     }
     if (body.qr) {
       setQr(body.qr); setStatus("awaiting_scan");
-      // Poll every 3s
+      // Poll status via GET every 3s (no more repeated /connect calls)
       stopPolling();
       pollRef.current = setInterval(async () => {
-        const rr = await callConnect();
-        const bb: any = rr?.body ?? {};
-        if (bb.qr && bb.qr !== body.qr) setQr(bb.qr);
-        if (bb.status === "already_connected" || bb.status === "connected") {
+        if (!clinicId) return;
+        const s = await checkStatus({ data: { clinicId } });
+        if (s?.connected) {
           stopPolling(); setQr(null); setStatus("connected");
-          // Mirror to clinic row (server also does this)
-          if (clinicId) await supabase.from("clinics").update({ whatsapp_connected: true }).eq("id", clinicId);
           onChange();
           toast.success("WhatsApp linked");
         }

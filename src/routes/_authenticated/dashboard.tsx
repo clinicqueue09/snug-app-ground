@@ -32,7 +32,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import {
   LogOut,
-  Stethoscope,
+  
   Clock,
   CheckCircle2,
   PlayCircle,
@@ -54,6 +54,8 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { TimeSelect, to24h, parse24h, formatDisplay } from "@/components/TimeSelect";
 import { WhatsAppSetupCard, WarmConnectCard } from "@/components/WhatsAppSetupCard";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import logoUrl from "@/assets/logo.png";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -82,6 +84,7 @@ type Token = {
   appointment_time: string | null;
   created_at: string;
   doctor_arrived_sent_at?: string | null;
+  reported_at?: string | null;
 };
 type PlatformNotification = {
   id: string;
@@ -234,6 +237,19 @@ function Dashboard() {
   const todayTokens = sortAndTokenize(todayAll);
   const upcomingAll = tokens.filter((t) => t.appointment_date > today && t.status !== "cancelled");
   const upcomingTokens = sortAndTokenize(upcomingAll);
+  // 30-day history: past dates (excluding today), any status
+  const historyCutoff = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    d.setHours(0, 0, 0, 0);
+    return format(d, "yyyy-MM-dd");
+  })();
+  const historyAll = tokens
+    .filter((t) => t.appointment_date < today && t.appointment_date >= historyCutoff)
+    .filter(filterDoctor);
+  const historyTokens = sortAndTokenize(
+    historyAll.slice().sort((a, b) => b.appointment_date.localeCompare(a.appointment_date)),
+  );
 
   const unreadNotifs = notifs.filter((n) => !n.read_at).length;
 
@@ -258,12 +274,21 @@ function Dashboard() {
       <header className="border-b border-slate-200 bg-white">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-10 w-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shadow-sm shrink-0">
-              <Stethoscope className="h-5 w-5" />
-            </div>
+            <img
+              src={logoUrl}
+              alt="ClinicQ logo"
+              width={40}
+              height={40}
+              className="h-10 w-10 rounded-xl shadow-sm shrink-0 bg-white object-contain"
+            />
             <div className="min-w-0">
-              <div className="font-semibold text-slate-900 leading-tight truncate">
-                {clinic?.name ?? "Clinic Queue"}
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="font-semibold text-slate-900 leading-tight truncate">
+                  {clinic?.name ?? "Clinic Queue"}
+                </span>
+                <span className="text-[11px] font-medium text-teal-700 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded">
+                  ClinicQ · Calm queues, happier patients
+                </span>
               </div>
               {clinic?.address && <div className="text-sm text-slate-600 truncate">{clinic.address}</div>}
               <div className="text-xs text-slate-500 truncate">{email}</div>
@@ -360,6 +385,10 @@ function Dashboard() {
                 <CalendarClock className="h-3.5 w-3.5" />
                 Upcoming
               </TabsTrigger>
+              <TabsTrigger value="history" className="gap-1.5">
+                <CalendarClock className="h-3.5 w-3.5" />
+                History (30d)
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="today" className="space-y-4">
@@ -422,6 +451,23 @@ function Dashboard() {
                 onEdited={loadAll}
                 emptyText="No upcoming appointments."
                 showDate
+              />
+            </TabsContent>
+
+            <TabsContent value="history" className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900 tracking-tight">History</h2>
+                <p className="text-sm text-slate-500 mt-0.5">Last 30 days · {historyTokens.length} records</p>
+              </div>
+              <QueueTable
+                tokens={historyTokens}
+                loading={loading}
+                doctorMap={doctorMap}
+                onUpdate={updateStatus}
+                onEdited={loadAll}
+                emptyText="No history in the last 30 days."
+                showDate
+                readOnly
               />
             </TabsContent>
           </Tabs>
@@ -496,6 +542,7 @@ function QueueTable({
   onEdited,
   emptyText,
   showDate,
+  readOnly,
 }: {
   tokens: Array<Token & { displayToken: number }>;
   loading: boolean;
@@ -504,33 +551,34 @@ function QueueTable({
   onEdited: () => void;
   emptyText: string;
   showDate?: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <Card className="border-slate-200 shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-              <th className="px-4 py-3 w-16">Token</th>
-              <th className="px-4 py-3">Patient</th>
-              <th className="px-4 py-3 hidden md:table-cell">Phone</th>
-              <th className="px-4 py-3 hidden sm:table-cell">Doctor</th>
-              {showDate && <th className="px-4 py-3 hidden md:table-cell">Date</th>}
-              <th className="px-4 py-3">Time</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+            <tr className="border-b border-slate-200 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+              <th className="px-3 py-2 w-14">Token</th>
+              <th className="px-3 py-2">Patient</th>
+              <th className="px-3 py-2 hidden lg:table-cell">Phone</th>
+              <th className="px-3 py-2 hidden md:table-cell">Doctor</th>
+              {showDate && <th className="px-3 py-2 hidden md:table-cell">Date</th>}
+              <th className="px-3 py-2">Time</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
                   Loading…
                 </td>
               </tr>
             ) : tokens.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
                   {emptyText}
                 </td>
               </tr>
@@ -543,6 +591,7 @@ function QueueTable({
                   onUpdate={onUpdate}
                   onEdited={onEdited}
                   showDate={showDate}
+                  readOnly={readOnly}
                 />
               ))
             )}
@@ -559,71 +608,120 @@ function TokenRow({
   onUpdate,
   onEdited,
   showDate,
+  readOnly,
 }: {
   token: Token & { displayToken: number };
   doctor?: Doctor;
   onUpdate: (t: Token, s: Token["status"]) => void;
   onEdited: () => void;
   showDate?: boolean;
+  readOnly?: boolean;
 }) {
   const meta = statusMeta[token.status];
   const Icon = meta.icon;
+  const reported = Boolean(token.reported_at);
+
+  const markReported = async () => {
+    const { error } = await (supabase.from("tokens") as any)
+      .update({ reported_at: new Date().toISOString() })
+      .eq("id", token.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Marked as reported");
+      onEdited();
+    }
+  };
 
   return (
-    <tr className="hover:bg-slate-50/60 transition-colors">
-      <td className="px-4 py-3">
-        <div className="h-9 w-9 rounded-lg bg-sky-50 text-sky-700 font-semibold text-sm flex items-center justify-center">
+    <tr className={cn("hover:bg-slate-50/60 transition-colors", reported && "bg-emerald-50/40")}>
+      <td className="px-3 py-2">
+        <div
+          className={cn(
+            "h-8 w-8 rounded-lg font-semibold text-xs flex items-center justify-center",
+            reported
+              ? "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-300"
+              : "bg-sky-50 text-sky-700",
+          )}
+        >
           {token.displayToken}
         </div>
       </td>
-      <td className="px-4 py-3">
-        <InlineNameEdit token={token} onSaved={onEdited} />
+      <td className="px-3 py-2">
+        <div className="flex flex-col min-w-0">
+          {readOnly ? (
+            <span className="font-medium text-slate-900 truncate">{token.patient_name}</span>
+          ) : (
+            <InlineNameEdit token={token} onSaved={onEdited} />
+          )}
+          <span className="text-[11px] text-slate-500 lg:hidden truncate">{token.phone_number}</span>
+          {reported && (
+            <span className="text-[10px] font-medium text-emerald-700 uppercase tracking-wide">Reported</span>
+          )}
+        </div>
       </td>
-      <td className="px-4 py-3 text-slate-600 hidden md:table-cell">{token.phone_number}</td>
-      <td className="px-4 py-3 text-slate-600 hidden sm:table-cell">{doctor?.name ?? "—"}</td>
-      {showDate && <td className="px-4 py-3 text-slate-600 hidden md:table-cell">{token.appointment_date}</td>}
-      <td className="px-4 py-3">
-        <InlineTimeEdit token={token} onSaved={onEdited} />
+      <td className="px-3 py-2 text-slate-600 hidden lg:table-cell text-xs">{token.phone_number}</td>
+      <td className="px-3 py-2 text-slate-600 hidden md:table-cell text-xs truncate max-w-[140px]">
+        {doctor?.name ?? "—"}
       </td>
-      <td className="px-4 py-3">
-        <Badge variant="outline" className={`gap-1 font-medium ${meta.className}`}>
+      {showDate && (
+        <td className="px-3 py-2 text-slate-600 hidden md:table-cell text-xs">{token.appointment_date}</td>
+      )}
+      <td className="px-3 py-2">
+        {readOnly ? (
+          <span className="text-xs text-slate-700">{formatDisplay(token.appointment_time)}</span>
+        ) : (
+          <InlineTimeEdit token={token} onSaved={onEdited} />
+        )}
+      </td>
+      <td className="px-3 py-2">
+        <Badge variant="outline" className={`gap-1 font-medium text-[11px] px-1.5 py-0.5 ${meta.className}`}>
           <Icon className="h-3 w-3" />
           {meta.label}
         </Badge>
       </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center justify-end gap-1 flex-wrap">
-          {token.status === "waiting" && (
+      <td className="px-3 py-2">
+        <div className="flex items-center justify-end gap-0.5 flex-wrap">
+          {!readOnly && token.status === "waiting" && !reported && (
             <Button
               size="sm"
               variant="ghost"
-              className="text-blue-700 hover:bg-blue-50"
+              className="h-7 px-2 text-emerald-700 hover:bg-emerald-50 text-xs"
+              onClick={markReported}
+            >
+              Reported
+            </Button>
+          )}
+          {!readOnly && token.status === "waiting" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-blue-700 hover:bg-blue-50 text-xs"
               onClick={() => onUpdate(token, "in_consultation")}
             >
               Start
             </Button>
           )}
-          {token.status === "in_consultation" && (
+          {!readOnly && token.status === "in_consultation" && (
             <Button
               size="sm"
               variant="ghost"
-              className="text-emerald-700 hover:bg-emerald-50"
+              className="h-7 px-2 text-emerald-700 hover:bg-emerald-50 text-xs"
               onClick={() => onUpdate(token, "completed")}
             >
               Complete
             </Button>
           )}
-          {(token.status === "waiting" || token.status === "in_consultation") && (
+          {!readOnly && (token.status === "waiting" || token.status === "in_consultation") && (
             <Button
               size="sm"
               variant="ghost"
-              className="text-rose-700 hover:bg-rose-50"
+              className="h-7 px-2 text-rose-700 hover:bg-rose-50 text-xs"
               onClick={() => onUpdate(token, "no_show")}
             >
               No Show
             </Button>
           )}
-          <RescheduleDialog token={token} onSaved={onEdited} />
+          {!readOnly && <RescheduleDialog token={token} onSaved={onEdited} />}
         </div>
       </td>
     </tr>
@@ -861,6 +959,15 @@ function AddPatientCard({
     if (!doctorId) return toast.error("Doctor is required");
     if (!date) return toast.error("Pick an appointment date");
     if (!hour || !minute) return toast.error("Pick an appointment time");
+    // Block past date-times (validated in local clinic time)
+    const apptTime24 = to24h(hour, minute, meridiem);
+    if (!apptTime24) return toast.error("Pick a valid appointment time");
+    const [ah, am] = apptTime24.split(":").map((n) => parseInt(n, 10));
+    const apptDT = new Date(date);
+    apptDT.setHours(ah, am, 0, 0);
+    if (apptDT.getTime() < Date.now()) {
+      return toast.error("Appointment must be in the future.");
+    }
     setSaving(true);
     const { data, error } = await supabase
       .from("tokens")
@@ -1521,14 +1628,22 @@ function FeedbackTray({ onSubmit }: { onSubmit: (message: string) => Promise<voi
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <button
-          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-sky-600 hover:bg-sky-700 text-white px-4 py-3 shadow-lg text-sm font-medium"
-          aria-label="Open feedback"
-        >
-          <MessageCircle className="h-4 w-4" /> Suggestions / Feedback
-        </button>
-      </DialogTrigger>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                className="fixed bottom-6 right-6 z-40 inline-flex items-center justify-center h-11 w-11 rounded-full bg-teal-600 hover:bg-teal-700 text-white shadow-lg ring-2 ring-white/60"
+                aria-label="Suggestions / Feedback"
+              >
+                <MessageCircle className="h-5 w-5" />
+              </button>
+            </DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="left">Suggestions / Feedback</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Suggestions / Feedback</DialogTitle>

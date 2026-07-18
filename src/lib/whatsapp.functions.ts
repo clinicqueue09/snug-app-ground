@@ -4,10 +4,15 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 const GATEWAY_BASE = "http://15.207.87.63:3000";
 const MAX_TOTAL_MESSAGES = 7;
 const MAX_TOKEN_UPDATES = 3;
+const SIGNATURE = "— Powered by ClinicQ";
 const DISCLAIMER =
   "Note: All stated times are tentative appointment times and may shift with live queue movement.";
 const WARM_CONNECT_TEXT =
-  "Hello! This is your clinic. We will be using this number to send your appointment updates and queue status. Please reply with 'ok' to confirm you have received this message.";
+  `Hello! This is your clinic. We will be using this number to send your appointment updates and queue status. Please reply with 'ok' to confirm you have received this message.\n\n${SIGNATURE}`;
+
+function withSig(msg: string) {
+  return msg.trimEnd() + `\n\n${SIGNATURE}`;
+}
 
 type Variant =
   | "confirmation"
@@ -61,25 +66,25 @@ export function buildMessage(params: {
 
   switch (params.variant) {
     case "confirmation":
-      return `${base} your appointment at ${params.clinicName} with ${doc} is confirmed.\n${dt}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} your appointment at ${params.clinicName} with ${doc} is confirmed.\n${dt}\n${location}\n\n${DISCLAIMER}`);
     case "reminder_24h":
-      return `${base} reminder — your appointment at ${params.clinicName} with ${doc} is tomorrow.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} reminder — your appointment at ${params.clinicName} with ${doc} is tomorrow.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     case "doctor_arrived":
-      return `${base} ${doc} has arrived at ${params.clinicName} and consultations are starting.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} ${doc} has arrived at ${params.clinicName} and consultations are starting.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     case "next_in_line":
-      return `${base} you are next in line for ${doc} at ${params.clinicName}. Please be ready.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} you are next in line for ${doc} at ${params.clinicName}. Please be ready.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     case "token_update": {
       const timing = params.tentativeTime
         ? `Your tentative time with ${doc} is now ${params.tentativeTime}.`
         : `Queue update from ${doc} at ${params.clinicName}.`;
-      return `${base} ${timing}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} ${timing}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     }
     case "shift_update": {
       const delay = params.delayMinutes && params.delayMinutes > 0
         ? `Doctor shift is delayed by ${params.delayMinutes} minutes.`
         : `Doctor shift is on time.`;
       const newTime = params.tentativeTime ? ` Your updated tentative time: ${params.tentativeTime}.` : "";
-      return `${base} ${delay}${newTime}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`;
+      return withSig(`${base} ${delay}${newTime}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     }
   }
 }
@@ -451,6 +456,33 @@ export const connectWhatsApp = createServerFn({ method: "POST" })
       return { ok: res.ok, status: res.status, body };
     } catch (e: any) {
       return { ok: false as const, status: 0, error: e?.message ?? "network error" };
+    }
+  });
+
+/**
+ * GET-only status check. Polls gateway /status?clinicId=... without
+ * repeatedly hitting /connect (which can force new QR generation).
+ */
+export const checkWhatsAppStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { clinicId: string }) => input)
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    try {
+      const res = await fetch(`${GATEWAY_BASE}/status?clinicId=${encodeURIComponent(data.clinicId)}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      const text = await res.text();
+      let body: any = {};
+      try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text }; }
+      const connected = body?.status === "connected" || body?.status === "already_connected" || body?.connected === true;
+      if (connected) {
+        await (supabase.from("clinics") as any).update({ whatsapp_connected: true }).eq("id", data.clinicId);
+      }
+      return { ok: res.ok, status: res.status, connected, body };
+    } catch (e: any) {
+      return { ok: false as const, status: 0, connected: false, error: e?.message ?? "network error" };
     }
   });
 

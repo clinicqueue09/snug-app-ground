@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 const GATEWAY_BASE = "http://15.207.87.63:3000";
+const SIGNATURE = "— Powered by ClinicQ";
 const DISCLAIMER = "Note: All stated times are tentative appointment times and may shift with live queue movement.";
 const MAX_TOTAL_MESSAGES = 7;
 
@@ -83,7 +84,7 @@ export const Route = createFileRoute("/api/public/hooks/whatsapp-reminders")({
           const contact = clinic.clinic_mobile ? ` Contact: ${clinic.clinic_mobile}.` : "";
           const doc = doctorLabel(doctor?.name ?? "your doctor", doctor?.specialty ?? null);
           const timeStr = fmtTime12(t.appointment_time);
-          const message = `Hello ${t.patient_name}, reminder — your appointment at ${clinic.name} with ${doc} is tomorrow.\nDate: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}\nYour latest token: #${t.token_number}.\nFull Clinic Address / Google Map Link: ${clinic.address}.${contact}\n\n${DISCLAIMER}`;
+          const message = `Hello ${t.patient_name}, reminder — your appointment at ${clinic.name} with ${doc} is tomorrow.\nDate: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}\nYour latest token: #${t.token_number}.\nFull Clinic Address / Google Map Link: ${clinic.address}.${contact}\n\n${DISCLAIMER}\n\n${SIGNATURE}`;
 
           const ok = await postToGateway(t.clinic_id, t.phone_number, message);
           if (!ok) continue;
