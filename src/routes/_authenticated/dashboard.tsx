@@ -542,6 +542,7 @@ function QueueTable({
   onEdited,
   emptyText,
   showDate,
+  readOnly,
 }: {
   tokens: Array<Token & { displayToken: number }>;
   loading: boolean;
@@ -550,33 +551,34 @@ function QueueTable({
   onEdited: () => void;
   emptyText: string;
   showDate?: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <Card className="border-slate-200 shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-              <th className="px-4 py-3 w-16">Token</th>
-              <th className="px-4 py-3">Patient</th>
-              <th className="px-4 py-3 hidden md:table-cell">Phone</th>
-              <th className="px-4 py-3 hidden sm:table-cell">Doctor</th>
-              {showDate && <th className="px-4 py-3 hidden md:table-cell">Date</th>}
-              <th className="px-4 py-3">Time</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+            <tr className="border-b border-slate-200 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+              <th className="px-3 py-2 w-14">Token</th>
+              <th className="px-3 py-2">Patient</th>
+              <th className="px-3 py-2 hidden lg:table-cell">Phone</th>
+              <th className="px-3 py-2 hidden md:table-cell">Doctor</th>
+              {showDate && <th className="px-3 py-2 hidden md:table-cell">Date</th>}
+              <th className="px-3 py-2">Time</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
                   Loading…
                 </td>
               </tr>
             ) : tokens.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
                   {emptyText}
                 </td>
               </tr>
@@ -589,6 +591,7 @@ function QueueTable({
                   onUpdate={onUpdate}
                   onEdited={onEdited}
                   showDate={showDate}
+                  readOnly={readOnly}
                 />
               ))
             )}
@@ -604,6 +607,126 @@ function TokenRow({
   doctor,
   onUpdate,
   onEdited,
+  showDate,
+  readOnly,
+}: {
+  token: Token & { displayToken: number };
+  doctor?: Doctor;
+  onUpdate: (t: Token, s: Token["status"]) => void;
+  onEdited: () => void;
+  showDate?: boolean;
+  readOnly?: boolean;
+}) {
+  const meta = statusMeta[token.status];
+  const Icon = meta.icon;
+  const reported = Boolean(token.reported_at);
+
+  const markReported = async () => {
+    const { error } = await (supabase.from("tokens") as any)
+      .update({ reported_at: new Date().toISOString() })
+      .eq("id", token.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Marked as reported");
+      onEdited();
+    }
+  };
+
+  return (
+    <tr className={cn("hover:bg-slate-50/60 transition-colors", reported && "bg-emerald-50/40")}>
+      <td className="px-3 py-2">
+        <div
+          className={cn(
+            "h-8 w-8 rounded-lg font-semibold text-xs flex items-center justify-center",
+            reported
+              ? "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-300"
+              : "bg-sky-50 text-sky-700",
+          )}
+        >
+          {token.displayToken}
+        </div>
+      </td>
+      <td className="px-3 py-2">
+        <div className="flex flex-col min-w-0">
+          {readOnly ? (
+            <span className="font-medium text-slate-900 truncate">{token.patient_name}</span>
+          ) : (
+            <InlineNameEdit token={token} onSaved={onEdited} />
+          )}
+          <span className="text-[11px] text-slate-500 lg:hidden truncate">{token.phone_number}</span>
+          {reported && (
+            <span className="text-[10px] font-medium text-emerald-700 uppercase tracking-wide">Reported</span>
+          )}
+        </div>
+      </td>
+      <td className="px-3 py-2 text-slate-600 hidden lg:table-cell text-xs">{token.phone_number}</td>
+      <td className="px-3 py-2 text-slate-600 hidden md:table-cell text-xs truncate max-w-[140px]">
+        {doctor?.name ?? "—"}
+      </td>
+      {showDate && (
+        <td className="px-3 py-2 text-slate-600 hidden md:table-cell text-xs">{token.appointment_date}</td>
+      )}
+      <td className="px-3 py-2">
+        {readOnly ? (
+          <span className="text-xs text-slate-700">{formatDisplay(token.appointment_time)}</span>
+        ) : (
+          <InlineTimeEdit token={token} onSaved={onEdited} />
+        )}
+      </td>
+      <td className="px-3 py-2">
+        <Badge variant="outline" className={`gap-1 font-medium text-[11px] px-1.5 py-0.5 ${meta.className}`}>
+          <Icon className="h-3 w-3" />
+          {meta.label}
+        </Badge>
+      </td>
+      <td className="px-3 py-2">
+        <div className="flex items-center justify-end gap-0.5 flex-wrap">
+          {!readOnly && token.status === "waiting" && !reported && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-emerald-700 hover:bg-emerald-50 text-xs"
+              onClick={markReported}
+            >
+              Reported
+            </Button>
+          )}
+          {!readOnly && token.status === "waiting" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-blue-700 hover:bg-blue-50 text-xs"
+              onClick={() => onUpdate(token, "in_consultation")}
+            >
+              Start
+            </Button>
+          )}
+          {!readOnly && token.status === "in_consultation" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-emerald-700 hover:bg-emerald-50 text-xs"
+              onClick={() => onUpdate(token, "completed")}
+            >
+              Complete
+            </Button>
+          )}
+          {!readOnly && (token.status === "waiting" || token.status === "in_consultation") && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-rose-700 hover:bg-rose-50 text-xs"
+              onClick={() => onUpdate(token, "no_show")}
+            >
+              No Show
+            </Button>
+          )}
+          {!readOnly && <RescheduleDialog token={token} onSaved={onEdited} />}
+        </div>
+      </td>
+    </tr>
+  );
+}
   showDate,
 }: {
   token: Token & { displayToken: number };
