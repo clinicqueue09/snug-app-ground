@@ -367,6 +367,35 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_optins: {
+        Row: {
+          clinic_id: string
+          id: string
+          opted_in_at: string
+          phone_number: string
+        }
+        Insert: {
+          clinic_id: string
+          id?: string
+          opted_in_at?: string
+          phone_number: string
+        }
+        Update: {
+          clinic_id?: string
+          id?: string
+          opted_in_at?: string
+          phone_number?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_optins_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

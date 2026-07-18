@@ -17,6 +17,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAdminFeedbackRouteImport } from './routes/_authenticated/admin/feedback'
 import { Route as ApiPublicHooksWhatsappRemindersRouteImport } from './routes/api/public/hooks/whatsapp-reminders'
+import { Route as ApiPublicHooksWhatsappOptinRouteImport } from './routes/api/public/hooks/whatsapp-optin'
 import { Route as ApiPublicHooksRenewalRemindersRouteImport } from './routes/api/public/hooks/renewal-reminders'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -60,6 +61,12 @@ const ApiPublicHooksWhatsappRemindersRoute =
     path: '/api/public/hooks/whatsapp-reminders',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksWhatsappOptinRoute =
+  ApiPublicHooksWhatsappOptinRouteImport.update({
+    id: '/api/public/hooks/whatsapp-optin',
+    path: '/api/public/hooks/whatsapp-optin',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksRenewalRemindersRoute =
   ApiPublicHooksRenewalRemindersRouteImport.update({
     id: '/api/public/hooks/renewal-reminders',
@@ -75,6 +82,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/api/public/hooks/renewal-reminders': typeof ApiPublicHooksRenewalRemindersRoute
+  '/api/public/hooks/whatsapp-optin': typeof ApiPublicHooksWhatsappOptinRoute
   '/api/public/hooks/whatsapp-reminders': typeof ApiPublicHooksWhatsappRemindersRoute
 }
 export interface FileRoutesByTo {
@@ -85,6 +93,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/api/public/hooks/renewal-reminders': typeof ApiPublicHooksRenewalRemindersRoute
+  '/api/public/hooks/whatsapp-optin': typeof ApiPublicHooksWhatsappOptinRoute
   '/api/public/hooks/whatsapp-reminders': typeof ApiPublicHooksWhatsappRemindersRoute
 }
 export interface FileRoutesById {
@@ -97,6 +106,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/admin/feedback': typeof AuthenticatedAdminFeedbackRoute
   '/api/public/hooks/renewal-reminders': typeof ApiPublicHooksRenewalRemindersRoute
+  '/api/public/hooks/whatsapp-optin': typeof ApiPublicHooksWhatsappOptinRoute
   '/api/public/hooks/whatsapp-reminders': typeof ApiPublicHooksWhatsappRemindersRoute
 }
 export interface FileRouteTypes {
@@ -109,6 +119,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/admin/feedback'
     | '/api/public/hooks/renewal-reminders'
+    | '/api/public/hooks/whatsapp-optin'
     | '/api/public/hooks/whatsapp-reminders'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -119,6 +130,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/admin/feedback'
     | '/api/public/hooks/renewal-reminders'
+    | '/api/public/hooks/whatsapp-optin'
     | '/api/public/hooks/whatsapp-reminders'
   id:
     | '__root__'
@@ -130,6 +142,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/admin/feedback'
     | '/api/public/hooks/renewal-reminders'
+    | '/api/public/hooks/whatsapp-optin'
     | '/api/public/hooks/whatsapp-reminders'
   fileRoutesById: FileRoutesById
 }
@@ -140,6 +153,7 @@ export interface RootRouteChildren {
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ApiPublicHooksRenewalRemindersRoute: typeof ApiPublicHooksRenewalRemindersRoute
+  ApiPublicHooksWhatsappOptinRoute: typeof ApiPublicHooksWhatsappOptinRoute
   ApiPublicHooksWhatsappRemindersRoute: typeof ApiPublicHooksWhatsappRemindersRoute
 }
 
@@ -201,6 +215,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksWhatsappRemindersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/whatsapp-optin': {
+      id: '/api/public/hooks/whatsapp-optin'
+      path: '/api/public/hooks/whatsapp-optin'
+      fullPath: '/api/public/hooks/whatsapp-optin'
+      preLoaderRoute: typeof ApiPublicHooksWhatsappOptinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/renewal-reminders': {
       id: '/api/public/hooks/renewal-reminders'
       path: '/api/public/hooks/renewal-reminders'
@@ -231,18 +252,9 @@ const rootRouteChildren: RootRouteChildren = {
   ForgotPasswordRoute: ForgotPasswordRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ApiPublicHooksRenewalRemindersRoute: ApiPublicHooksRenewalRemindersRoute,
+  ApiPublicHooksWhatsappOptinRoute: ApiPublicHooksWhatsappOptinRoute,
   ApiPublicHooksWhatsappRemindersRoute: ApiPublicHooksWhatsappRemindersRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

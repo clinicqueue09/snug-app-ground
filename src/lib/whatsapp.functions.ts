@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { sendSmsRaw } from "@/lib/sms.functions";
 
 const GATEWAY_BASE = "http://15.207.87.63:3000";
 const MAX_TOTAL_MESSAGES = 7;
@@ -7,8 +8,6 @@ const MAX_TOKEN_UPDATES = 3;
 const SIGNATURE = "— Powered by ClinicQ";
 const DISCLAIMER =
   "Note: All stated times are tentative appointment times and may shift with live queue movement.";
-const WARM_CONNECT_TEXT =
-  `Hello! This is your clinic. We will be using this number to send your appointment updates and queue status. Please reply with 'ok' to confirm you have received this message.\n\n${SIGNATURE}`;
 
 function withSig(msg: string) {
   return msg.trimEnd() + `\n\n${SIGNATURE}`;
@@ -487,26 +486,149 @@ export const checkWhatsAppStatus = createServerFn({ method: "GET" })
   });
 
 /**
- * Warm-connect / test initial message. Uses the exact required text.
+ * Central patient-notification dispatcher.
+ *
+ * Routes each of the 5 touchpoints (confirmation, reported, queue_update,
+ * next_in_line, doctor_arrived) through a single entry:
+ *   - If the patient's phone has opted in for this clinic AND the clinic
+ *     WhatsApp gateway is connected → send via WhatsApp (postToGateway).
+ *   - Otherwise → send via Fast2SMS. For the first ("confirmation") message
+ *     we send the opt-in prompt with a wa.me link so the patient can opt in.
  */
-export const sendWarmConnectMessage = createServerFn({ method: "POST" })
+type NotifyType = "confirmation" | "reported" | "queue_update" | "next_in_line" | "doctor_arrived";
+
+export const notifyPatient = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { phone: string }) => input)
+  .inputValidator((input: { tokenId: string; messageType: NotifyType; tentativeTime?: string | null }) => input)
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const phone10 = (data.phone ?? "").replace(/\D/g, "").slice(-10);
-    if (!/^[0-9]{10}$/.test(phone10)) return { ok: false as const, error: "Enter a valid 10-digit phone number" };
+    const { supabase } = context;
 
-    const { data: recep } = await supabase
-      .from("receptionists").select("clinic_id").eq("user_id", userId).maybeSingle();
-    const clinicId = (recep as any)?.clinic_id as string | undefined;
-    if (!clinicId) return { ok: false as const, error: "No clinic linked to your account" };
+    const { data: tokenRow, error: tokErr } = await supabase
+      .from("tokens").select("*").eq("id", data.tokenId).maybeSingle();
+    if (tokErr || !tokenRow) return { ok: false as const, channel: null, error: tokErr?.message ?? "Token not found" };
+    const t = tokenRow as any;
 
-    if (!(await clinicIsConnected(supabase, clinicId))) {
-      return { ok: false as const, error: "Link WhatsApp first from the WhatsApp Setup section." };
+    if ((t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) {
+      return { ok: false as const, channel: null, error: `Message cap reached (${MAX_TOTAL_MESSAGES}/patient).` };
     }
 
-    const res = await postToGateway(clinicId, phone10, WARM_CONNECT_TEXT);
-    if (!res.ok) return { ok: false as const, status: res.status, error: `Send failed (${res.status})` };
-    return { ok: true as const, status: res.status };
+    const [clinicRes, doctorRes] = await Promise.all([
+      supabase.from("clinics").select("name, address, clinic_mobile, whatsapp_connected").eq("id", t.clinic_id).maybeSingle(),
+      t.doctor_id
+        ? supabase.from("doctors").select("name, specialty").eq("id", t.doctor_id).maybeSingle()
+        : Promise.resolve({ data: null as any, error: null }),
+    ]);
+    const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null, whatsapp_connected: false }) as any;
+    const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
+
+    const phone10 = String(t.phone_number ?? "").replace(/\D/g, "").slice(-10);
+    if (!/^[0-9]{10}$/.test(phone10)) {
+      return { ok: false as const, channel: null, error: "Invalid patient phone number" };
+    }
+
+    // Check opt-in (per clinic + phone, persists across visits)
+    const { data: optRow } = await (supabase.from("whatsapp_optins" as any) as any)
+      .select("id").eq("clinic_id", t.clinic_id).eq("phone_number", phone10).maybeSingle();
+    const optedIn = Boolean(optRow?.id);
+
+    const useWhatsApp = optedIn && Boolean(clinic.whatsapp_connected);
+
+    // Map dispatcher types → existing WhatsApp variants
+    const waVariantMap: Record<NotifyType, Variant> = {
+      confirmation: "confirmation",
+      reported: "token_update",
+      queue_update: "token_update",
+      next_in_line: "next_in_line",
+      doctor_arrived: "doctor_arrived",
+    };
+
+    // Per-variant gating (mirrors sendWhatsAppMessage)
+    if (data.messageType === "doctor_arrived") {
+      if (t.doctor_arrived_sent_at) return { ok: false as const, channel: null, error: "Doctor-arrived alert already sent." };
+      const now = new Date();
+      const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      if (t.appointment_date !== todayISO) {
+        return { ok: false as const, channel: null, error: "Doctor-arrived can only be sent on the appointment date." };
+      }
+    }
+    if ((data.messageType === "queue_update" || data.messageType === "reported")
+      && (t.token_update_count ?? 0) >= MAX_TOKEN_UPDATES) {
+      return { ok: false as const, channel: null, error: `Token-update cap reached (${MAX_TOKEN_UPDATES}/patient).` };
+    }
+
+    const timeStr = fmtTime12(t.appointment_time);
+    const doc = doctorLabel(doctor?.name ?? "your doctor", doctor?.specialty ?? null);
+
+    let sendResult: { ok: boolean; status: number; error?: string };
+    let channel: "whatsapp" | "sms";
+
+    if (useWhatsApp) {
+      channel = "whatsapp";
+      const ctx = await computeQueueContext(supabase, t.clinic_id, t.doctor_id, t.appointment_date);
+      const latest = ctx.displayToken.get(t.id) ?? t.token_number ?? null;
+      const message = buildMessage({
+        variant: waVariantMap[data.messageType],
+        patientName: t.patient_name,
+        doctorName: doctor?.name ?? "your doctor",
+        doctorSpecialty: doctor?.specialty ?? null,
+        clinicName: clinic.name,
+        clinicAddress: clinic.address,
+        clinicMobile: clinic.clinic_mobile,
+        date: t.appointment_date,
+        time: t.appointment_time,
+        runningTokenNumber: ctx.runningTokenNumber,
+        latestTokenNumber: latest,
+        tentativeTime: data.tentativeTime ?? null,
+      });
+      sendResult = await postToGateway(t.clinic_id, phone10, message);
+    } else {
+      channel = "sms";
+      let smsText: string;
+      if (data.messageType === "confirmation") {
+        const waNumber = String(clinic.clinic_mobile ?? "").replace(/\D/g, "").slice(-10);
+        const waLink = waNumber ? `https://wa.me/91${waNumber}?text=Hi` : "";
+        smsText =
+          `Hello ${t.patient_name}, your appointment at ${clinic.name} with ${doc} is confirmed.\n` +
+          `Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}\n` +
+          `Please click the WhatsApp link below and send "Hi" to get further updates on appointment time, token number, as well as clinic location Google map link:\n` +
+          `${waLink}\n\n${SIGNATURE}`;
+      } else {
+        // Compact SMS for non-confirmation updates (no address / map)
+        const tokenLine = t.token_number != null ? ` Token #${t.token_number}.` : "";
+        const timing = data.tentativeTime ? ` Tentative time: ${data.tentativeTime}.` : "";
+        const base = `Hello ${t.patient_name},`;
+        switch (data.messageType) {
+          case "reported":
+            smsText = `${base} we've marked you as reported at ${clinic.name} with ${doc}.${tokenLine}${timing}\n${SIGNATURE}`;
+            break;
+          case "queue_update":
+            smsText = `${base} queue update at ${clinic.name} with ${doc}.${tokenLine}${timing}\n${SIGNATURE}`;
+            break;
+          case "next_in_line":
+            smsText = `${base} you're next in line for ${doc} at ${clinic.name}. Please be ready.${tokenLine}\n${SIGNATURE}`;
+            break;
+          case "doctor_arrived":
+            smsText = `${base} ${doc} has arrived at ${clinic.name}. Consultations are starting.${tokenLine}\n${SIGNATURE}`;
+            break;
+          default:
+            smsText = `${base} update from ${clinic.name}.${tokenLine}\n${SIGNATURE}`;
+        }
+      }
+      sendResult = await sendSmsRaw(phone10, smsText);
+    }
+
+    if (!sendResult.ok) {
+      return { ok: false as const, channel, status: sendResult.status, error: sendResult.error ?? `Send failed (${sendResult.status})` };
+    }
+
+    const patch: Record<string, unknown> = {
+      whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
+    };
+    if (data.messageType === "doctor_arrived") patch.doctor_arrived_sent_at = new Date().toISOString();
+    if (data.messageType === "queue_update" || data.messageType === "reported") {
+      patch.token_update_count = (t.token_update_count ?? 0) + 1;
+    }
+    await (supabase.from("tokens") as any).update(patch).eq("id", t.id);
+
+    return { ok: true as const, channel, status: sendResult.status, optedIn };
   });
