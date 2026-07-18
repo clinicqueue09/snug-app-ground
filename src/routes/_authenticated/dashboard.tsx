@@ -873,6 +873,14 @@ function AddPatientCard({
     if (!doctorId) return toast.error("Doctor is required");
     if (!date) return toast.error("Pick an appointment date");
     if (!hour || !minute) return toast.error("Pick an appointment time");
+    // Block past date-times (validated in local clinic time)
+    const apptTime24 = to24h(hour, minute, meridiem);
+    const [ah, am] = apptTime24.split(":").map((n) => parseInt(n, 10));
+    const apptDT = new Date(date);
+    apptDT.setHours(ah, am, 0, 0);
+    if (apptDT.getTime() < Date.now()) {
+      return toast.error("Appointment must be in the future.");
+    }
     setSaving(true);
     const { data, error } = await supabase
       .from("tokens")
