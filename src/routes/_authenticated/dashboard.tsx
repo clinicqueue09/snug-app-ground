@@ -453,6 +453,23 @@ function Dashboard() {
                 showDate
               />
             </TabsContent>
+
+            <TabsContent value="history" className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900 tracking-tight">History</h2>
+                <p className="text-sm text-slate-500 mt-0.5">Last 30 days · {historyTokens.length} records</p>
+              </div>
+              <QueueTable
+                tokens={historyTokens}
+                loading={loading}
+                doctorMap={doctorMap}
+                onUpdate={updateStatus}
+                onEdited={loadAll}
+                emptyText="No history in the last 30 days."
+                showDate
+                readOnly
+              />
+            </TabsContent>
           </Tabs>
         </section>
       </main>
