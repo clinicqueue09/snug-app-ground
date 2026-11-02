@@ -595,10 +595,15 @@ export async function dispatchNotification(
     if (input.messageType === "confirmation") {
       const waNumber = String(clinic.clinic_mobile ?? "").replace(/\D/g, "").slice(-10);
       const waLink = waNumber ? `https://wa.me/91${waNumber}?text=Hi` : "";
+      // Clinics store their Google Maps link inside the address field
+      // (e.g. "Kondhwa Budruk / https://maps.app.goo.gl/xxxx") — surface it.
+      const mapLinkMatch = String(clinic.address ?? "").match(/https?:\/\/[^\s]+/);
+      const mapLink = mapLinkMatch?.[0] ?? "";
       smsText =
         `Hello ${t.patient_name}, your appointment at ${clinic.name} with ${doc} is confirmed.\n` +
         `Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}\n` +
-        `Please click the WhatsApp link below and send "Hi" to get further updates on appointment time, token number, as well as clinic location Google map link:\n` +
+        `Location: ${mapLink || clinic.address}\n` +
+        `Please click the WhatsApp link below and send "Hi" to get further updates on appointment time and token number:\n` +
         `${waLink}\n\n${SIGNATURE}`;
     } else {
       const tokenLine = t.token_number != null ? ` Token #${t.token_number}.` : "";
