@@ -602,9 +602,11 @@ export async function dispatchNotification(
       smsText =
         `Hello ${t.patient_name}, your appointment at ${clinic.name} with ${doc} is confirmed.\n` +
         `Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}\n` +
-        `Location: ${mapLink || clinic.address}\n` +
-        `Please click the WhatsApp link below and send "Hi" to get further updates on appointment time and token number:\n` +
-        `${waLink}\n\n${SIGNATURE}`;
+        (mapLink || clinic.address ? `Location: ${mapLink || clinic.address}\n` : "") +
+        (waLink
+          ? `To receive updates on WhatsApp, click the link below and send "Hi":\n${waLink}\n`
+          : "") +
+        `\n${SIGNATURE}`;
     } else {
       const tokenLine = t.token_number != null ? ` Token #${t.token_number}.` : "";
       const timing = input.tentativeTime ? ` Tentative time: ${input.tentativeTime}.` : "";
