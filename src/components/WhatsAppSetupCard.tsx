@@ -57,7 +57,7 @@ export function WhatsAppSetupCard({ clinicId, connected, onChange }: Props) {
       }, 3000);
     } else {
       setStatus("error");
-      toast.error(body.error ?? `Gateway responded ${r.status}`);
+      toast.error(body.error ?? `Gateway ${r.status}: ${String(body.raw ?? "").slice(0, 120)}`);
     }
   }
 
