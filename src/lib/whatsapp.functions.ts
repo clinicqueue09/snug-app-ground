@@ -449,7 +449,12 @@ export const connectWhatsApp = createServerFn({ method: "POST" })
       let body: any = {};
       try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text }; }
 
-      if (body?.status === "already_connected") {
+      if (!res.ok) {
+        const snippet = text.slice(0, 300);
+        console.error(`[connectWhatsApp] gateway responded ${res.status}: ${snippet}`);
+        if (body?.raw == null) body = { ...body, raw: snippet };
+      }
+
         await (supabase.from("clinics") as any).update({ whatsapp_connected: true }).eq("id", data.clinicId);
       }
       return { ok: res.ok, status: res.status, body };
