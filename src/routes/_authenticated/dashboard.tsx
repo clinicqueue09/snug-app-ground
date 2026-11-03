@@ -237,7 +237,14 @@ function Dashboard() {
   const todayAll = tokens.filter((t) => t.appointment_date === today && t.status !== "cancelled").filter(filterDoctor);
   const todayTokens = sortAndTokenize(todayAll);
   const upcomingAll = tokens.filter((t) => t.appointment_date > today && t.status !== "cancelled");
-  const upcomingTokens = sortAndTokenize(upcomingAll);
+  // Chronological: earliest date first, then earliest time (nulls last, created_at tiebreak)
+  const upcomingTokens = upcomingAll.slice().sort((a, b) => {
+    if (a.appointment_date !== b.appointment_date) return a.appointment_date.localeCompare(b.appointment_date);
+    const at = a.appointment_time ?? "99:99";
+    const bt = b.appointment_time ?? "99:99";
+    if (at !== bt) return at.localeCompare(bt);
+    return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+  });
   // 30-day history: past dates (excluding today), any status
   const historyCutoff = (() => {
     const d = new Date();
@@ -440,14 +447,13 @@ function Dashboard() {
                 <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Upcoming Appointments</h2>
                 <p className="text-sm text-slate-500 mt-0.5">{upcomingTokens.length} scheduled</p>
               </div>
-              <QueueTable
+              <UpcomingList
                 tokens={upcomingTokens}
                 loading={loading}
                 doctorMap={doctorMap}
                 onUpdate={updateStatus}
                 onEdited={loadAll}
                 emptyText="No upcoming appointments."
-                showDate
               />
             </TabsContent>
 
@@ -829,6 +835,7 @@ function InlineTimeEdit({ token, onSaved }: { token: Token; onSaved: () => void 
 }
 
 function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => void }) {
+  const notify = useServerFn(notifyPatient);
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState<Date | undefined>(
     token.appointment_date ? new Date(token.appointment_date + "T00:00:00") : new Date(),
@@ -859,6 +866,16 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
     toast.success("Rescheduled");
     setOpen(false);
     onSaved();
+    try {
+      const res = await notify({ data: { tokenId: token.id, messageType: "rescheduled" } });
+      if (res.ok) {
+        toast.success(res.channel === "whatsapp" ? "Rescheduled — patient notified by WhatsApp" : "Rescheduled — patient notified by SMS");
+      } else if (res.error) {
+        toast.warning(res.error);
+      }
+    } catch (e) {
+      console.warn("[reschedule notify] failed", e);
+    }
   };
 
   return (
