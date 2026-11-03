@@ -237,7 +237,14 @@ function Dashboard() {
   const todayAll = tokens.filter((t) => t.appointment_date === today && t.status !== "cancelled").filter(filterDoctor);
   const todayTokens = sortAndTokenize(todayAll);
   const upcomingAll = tokens.filter((t) => t.appointment_date > today && t.status !== "cancelled");
-  const upcomingTokens = sortAndTokenize(upcomingAll);
+  // Chronological: earliest date first, then earliest time (nulls last, created_at tiebreak)
+  const upcomingTokens = upcomingAll.slice().sort((a, b) => {
+    if (a.appointment_date !== b.appointment_date) return a.appointment_date.localeCompare(b.appointment_date);
+    const at = a.appointment_time ?? "99:99";
+    const bt = b.appointment_time ?? "99:99";
+    if (at !== bt) return at.localeCompare(bt);
+    return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+  });
   // 30-day history: past dates (excluding today), any status
   const historyCutoff = (() => {
     const d = new Date();
@@ -440,14 +447,13 @@ function Dashboard() {
                 <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Upcoming Appointments</h2>
                 <p className="text-sm text-slate-500 mt-0.5">{upcomingTokens.length} scheduled</p>
               </div>
-              <QueueTable
+              <UpcomingList
                 tokens={upcomingTokens}
                 loading={loading}
                 doctorMap={doctorMap}
                 onUpdate={updateStatus}
                 onEdited={loadAll}
                 emptyText="No upcoming appointments."
-                showDate
               />
             </TabsContent>
 
@@ -596,6 +602,139 @@ function QueueTable({
         </table>
       </div>
     </Card>
+  );
+}
+
+function UpcomingList({
+  tokens,
+  loading,
+  doctorMap,
+  onUpdate,
+  onEdited,
+  emptyText,
+}: {
+  tokens: Token[];
+  loading: boolean;
+  doctorMap: Map<string, Doctor>;
+  onUpdate: (t: Token, s: Token["status"]) => void;
+  onEdited: () => void;
+  emptyText: string;
+}) {
+  const groups: Array<{ date: string; label: string; items: Token[] }> = [];
+  for (const t of tokens) {
+    const last = groups[groups.length - 1];
+    if (last && last.date === t.appointment_date) last.items.push(t);
+    else {
+      groups.push({
+        date: t.appointment_date,
+        label: format(new Date(t.appointment_date + "T00:00:00"), "EEE d MMM"),
+        items: [t],
+      });
+    }
+  }
+  return (
+    <Card className="border-slate-200 shadow-sm">
+      {loading ? (
+        <div className="px-4 py-10 text-center text-slate-400 text-sm">Loading…</div>
+      ) : tokens.length === 0 ? (
+        <div className="px-4 py-10 text-center text-slate-400 text-sm">{emptyText}</div>
+      ) : (
+        <div className="divide-y divide-slate-100">
+          {groups.map((g) => (
+            <div key={g.date}>
+              <div className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50/80">
+                {g.label}
+              </div>
+              <div className="divide-y divide-slate-50">
+                {g.items.map((t) => (
+                  <UpcomingRow
+                    key={t.id}
+                    token={t}
+                    doctor={t.doctor_id ? doctorMap.get(t.doctor_id) : undefined}
+                    onUpdate={onUpdate}
+                    onEdited={onEdited}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function UpcomingRow({
+  token,
+  doctor,
+  onUpdate,
+  onEdited,
+}: {
+  token: Token;
+  doctor?: Doctor;
+  onUpdate: (t: Token, s: Token["status"]) => void;
+  onEdited: () => void;
+}) {
+  const meta = statusMeta[token.status];
+  const Icon = meta.icon;
+  const reported = Boolean(token.reported_at);
+
+  const markReported = async () => {
+    const { error } = await (supabase.from("tokens") as any)
+      .update({ reported_at: new Date().toISOString() })
+      .eq("id", token.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Marked as reported");
+      onEdited();
+    }
+  };
+
+  return (
+    <div className={cn("flex items-center gap-2 px-3 py-1.5 min-w-0", reported && "bg-emerald-50/40")}>
+      <span className="w-16 shrink-0 text-xs font-medium text-slate-700">{formatDisplay(token.appointment_time)}</span>
+      <div className="flex-1 min-w-0">
+        <span className="font-medium text-slate-900 text-sm truncate block">{token.patient_name}</span>
+      </div>
+      <span className="hidden sm:block text-xs text-slate-500 truncate max-w-[140px]">{doctor?.name ?? "—"}</span>
+      <Badge variant="outline" className={cn("gap-1 font-medium text-[11px] px-1.5 py-0.5 shrink-0", meta.className)}>
+        <Icon className="h-3 w-3" />
+        <span className="hidden sm:inline">{meta.label}</span>
+      </Badge>
+      <div className="flex items-center gap-0.5 shrink-0">
+        {!reported && token.status === "waiting" && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-emerald-700 hover:bg-emerald-50 text-xs"
+            onClick={markReported}
+          >
+            Reported
+          </Button>
+        )}
+        {token.status === "waiting" && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-blue-700 hover:bg-blue-50 text-xs"
+            onClick={() => onUpdate(token, "in_consultation")}
+          >
+            Start
+          </Button>
+        )}
+        {(token.status === "waiting" || token.status === "in_consultation") && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-rose-700 hover:bg-rose-50 text-xs"
+            onClick={() => onUpdate(token, "no_show")}
+          >
+            No Show
+          </Button>
+        )}
+        <RescheduleDialog token={token} onSaved={onEdited} />
+      </div>
+    </div>
   );
 }
 
@@ -829,6 +968,7 @@ function InlineTimeEdit({ token, onSaved }: { token: Token; onSaved: () => void 
 }
 
 function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => void }) {
+  const notify = useServerFn(notifyPatient);
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState<Date | undefined>(
     token.appointment_date ? new Date(token.appointment_date + "T00:00:00") : new Date(),
@@ -859,6 +999,16 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
     toast.success("Rescheduled");
     setOpen(false);
     onSaved();
+    try {
+      const res = await notify({ data: { tokenId: token.id, messageType: "rescheduled" } });
+      if (res.ok) {
+        toast.success(res.channel === "whatsapp" ? "Rescheduled — patient notified by WhatsApp" : "Rescheduled — patient notified by SMS");
+      } else if (res.error) {
+        toast.warning(res.error);
+      }
+    } catch (e) {
+      console.warn("[reschedule notify] failed", e);
+    }
   };
 
   return (
