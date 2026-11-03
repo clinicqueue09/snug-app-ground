@@ -1,43 +1,57 @@
 ## Goal
-Route the 24-hour reminder cron (`src/routes/api/public/hooks/whatsapp-reminders.ts`) through the same opt-in-aware dispatcher used by the five in-app touchpoints, so cron reminders honor `whatsapp_optins` and fall back to Fast2SMS when the patient hasn't opted in or the clinic's WhatsApp isn't connected.
 
-## Why the current code can't just `notifyPatient(...)`
-- `notifyPatient` in `src/lib/whatsapp.functions.ts` is gated by `requireSupabaseAuth` — the cron webhook is public and has no user session, so calling it would 401.
-- `notifyPatient` also doesn't yet know about the `reminder_24h` message type (it currently maps only confirmation / reported / queue_update / next_in_line / doctor_arrived) and its per-variant gating doesn't check `reminder_24h_sent_at`.
+Two changes to the receptionist dashboard:
+1. A "rescheduled" notification routed through the central opt-in-aware dispatcher, sent after every successful reschedule, and the doctor shift/delay flow moved onto the same dispatcher so non-opted-in patients get SMS.
+2. The Upcoming tab becomes a compact, chronologically ordered list grouped under date headings.
 
-## Changes
+## Part 1 — "rescheduled" notification (`src/lib/whatsapp.functions.ts`)
 
-### 1. Extract the dispatcher into a shared, auth-agnostic helper
-In `src/lib/whatsapp.functions.ts`:
-- Add `export type NotifyType = "confirmation" | "reported" | "queue_update" | "next_in_line" | "doctor_arrived" | "reminder_24h"`.
-- Extract the body of `notifyPatient.handler` into `export async function dispatchNotification(supabase: SupabaseLike, input: { tokenId; messageType: NotifyType; tentativeTime?: string | null })`. The function takes any Supabase client (user-scoped or `supabaseAdmin`) so it works from both auth-gated server fns and the public webhook.
-- Extend the internal logic:
-  - Add `reminder_24h` to `waVariantMap` → `"reminder_24h"`.
-  - Add gating: if `messageType === "reminder_24h"` and `t.reminder_24h_sent_at` is set, return early (already sent).
-  - Add a compact SMS branch for `reminder_24h`:
-    `"Hello {name}, reminder — your appointment at {clinic} with {doc} is tomorrow. Date: {date} | Time: {time}. Token #{token}. — Powered by ClinicQ"`.
-  - On success for `reminder_24h`, also patch `reminder_24h_sent_at = now()`.
-- `notifyPatient` becomes a thin wrapper that calls `dispatchNotification(context.supabase, data)`.
+- Add `"rescheduled"` to `NotifyType` and `"rescheduled"` to `Variant`.
+- `waVariantMap`: `rescheduled → "rescheduled"`.
+- `buildMessage()` new case:
+  `Hello {patient}, your appointment at {clinic} with {doc} has been rescheduled.\nNew date: {date} | New time: {time}\n{location}\n\n{DISCLAIMER}` — wrapped with `withSig` like the other variants.
+- New SMS branch in `dispatchNotification` for `rescheduled`:
+  `Hello {patient}, your appointment at {clinic} with {doc} has been rescheduled to {date} | {time}.` + `SIGNATURE`.
+- Counters: `whatsapp_messages_sent` is incremented (the dispatcher already does this for every successful send); `token_update_count` is NOT incremented — the existing `token_update_count` patch only fires for `queue_update`/`reported`, so no change needed there.
+- Routing stays as-is: WhatsApp when the phone is in `whatsapp_optins` and the clinic is connected, otherwise Fast2SMS. No new gating (reschedule can repeat).
 
-### 2. Rewrite the reminders route to use the dispatcher
-In `src/routes/api/public/hooks/whatsapp-reminders.ts`:
-- Drop the local `postToGateway`, `buildMessage`-style string, `MAX_TOTAL_MESSAGES`, and the `clinic.whatsapp_connected` gate.
-- Keep the existing 24h ±15 min windowing to pick candidate tokens (`status = waiting`, `reminder_24h_sent_at IS NULL`, `appointment_date` in the two-day window, and per-row `combineDT` check).
-- For each surviving token, `await dispatchNotification(supabaseAdmin, { tokenId: t.id, messageType: "reminder_24h" })`.
-- Count `sent` from `result.ok === true`; return `{ ok: true, sent }`. `reminder_24h_sent_at` and `whatsapp_messages_sent` are now maintained inside the dispatcher, so the route no longer writes them itself.
-- Since the dispatcher already looks up clinic / doctor / opt-in per token, we no longer need the batch `clinics` + `doctors` prefetch — remove it.
+### RescheduleDialog (`dashboard.tsx`, ~line 831)
 
-### 3. No schema changes
-Existing `whatsapp_optins`, `tokens.whatsapp_messages_sent`, and `tokens.reminder_24h_sent_at` cover everything.
+- Add `const notify = useServerFn(notifyPatient);` inside `RescheduleDialog`.
+- After the token update succeeds (before closing the dialog), call
+  `await notify({ data: { tokenId: token.id, messageType: "rescheduled" } })`.
+- On `res.ok`: `toast.success("Rescheduled — patient notified by WhatsApp/SMS")` when `res.channel === "whatsapp"`, `"Rescheduled — patient notified by SMS"` when `"sms"`.
+- On `!res.ok`: keep the plain `toast.success("Rescheduled")` plus `toast.warning(res.error)` — the reschedule itself must never fail because the message failed.
+- Existing duplicate-slot / DB-error toasts unchanged.
 
-### 4. No UI or call-site changes elsewhere
-`sendWhatsAppMessage` still exists for legacy paths and keeps its old behavior. Dashboard call sites continue to use `notifyPatient` unchanged. Only the cron path switches.
+### Doctor shift/delay flow (`applyDoctorShiftStatus`)
+
+It still calls `postToGateway` directly, so:
+- Add `"shift_update"` to `NotifyType` (the `Variant` already exists), `waVariantMap: shift_update → "shift_update"`, and an SMS branch:
+  `Hello {patient}, doctor shift is delayed by {delayMinutes} minutes at {clinic}. Your tentative time: {time}. Token #{token}.` + `SIGNATURE` (on-time case: "Doctor shift is on time." without delay).
+- Replace the WhatsApp-only send loop with per-token `dispatchNotification(supabase, { tokenId: t.id, messageType: "shift_update", tentativeTime })` after the appointment times are shifted. `tentativeTime` = the new shifted time in 12-hour format.
+- Return `{ ok, sent, shifted, ... }` counting `result.ok === true` so the existing dashboard toast keeps working. `whatsapp_messages_sent` is maintained by the dispatcher.
+
+## Part 2 — Upcoming tab layout (`dashboard.tsx`)
+
+- New `upcomingTokens` ordering: by `appointment_date` ascending, then `appointment_time` (nulls last, `created_at` tiebreak) — not today's time-only `sortAndTokenize`.
+- Replace the `QueueTable` in the Upcoming tab with a compact grouped list component (`UpcomingList`):
+  - Rows grouped under a small date heading (`EEE d MMM`, e.g. "Tue 4 Nov") when several share a day; heading shown once per day.
+  - Each row: 12-hour time (`formatDisplay`, e.g. "3:00 PM"), patient name, doctor name — tight single line, small paddings.
+  - Keep all action buttons (Reported / Start / No Show / Reschedule) but compact (existing `h-7` ghost buttons, fewer actions shown on narrow screens).
+  - Empty state "No upcoming appointments." unchanged; loading state preserved.
+- Today and History tabs unchanged.
 
 ## Files touched
-- `src/lib/whatsapp.functions.ts` — extract `dispatchNotification`, add `reminder_24h` support, keep `notifyPatient` as wrapper.
-- `src/routes/api/public/hooks/whatsapp-reminders.ts` — call `dispatchNotification(supabaseAdmin, ...)` per token; delete gateway/message helpers now living in the shared file.
+
+- `src/lib/whatsapp.functions.ts` — new `rescheduled` + `shift_update` types, message texts, SMS branches; `applyDoctorShiftStatus` rewritten to use `dispatchNotification`.
+- `src/routes/_authenticated/dashboard.tsx` — `RescheduleDialog` notification + toasts; new `UpcomingList` replacing the Upcoming tab's `QueueTable`.
+
+No schema changes — `tokens`, `whatsapp_optins`, counters all cover this.
 
 ## Verification
-- Trigger the cron endpoint against a clinic where opt-in exists → sends via WhatsApp gateway, increments counters, stamps `reminder_24h_sent_at`.
-- Trigger against a clinic with no opt-in row (or `whatsapp_connected = false`) → sends via Fast2SMS, same stamping.
-- Trigger twice → second call returns 0 sent because `reminder_24h_sent_at` is now set.
+
+- Typecheck and build pass.
+- Playwright against the preview: reschedule an upcoming appointment → success toast mentions the channel; verify the token's `whatsapp_messages_sent` increments and `token_update_count` does not.
+- Trigger a doctor delay → waiting patients get WhatsApp or SMS depending on opt-in; counters maintained by the dispatcher.
+- Upcoming tab: rows sorted earliest date then time, one date heading per shared day, 12-hour times, on desktop and mobile viewport.
