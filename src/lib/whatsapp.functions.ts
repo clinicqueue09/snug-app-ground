@@ -106,7 +106,7 @@ export function buildMessage(params: {
 
 async function postToGateway(clinicId: string, phone10: string, message: string) {
   try {
-    const res = await fetch(`${GATEWAY_BASE}/send-message`, {
+    const res = await gatewayFetch("/send-message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clinicId, phone: `91${phone10}`, message }),
@@ -456,7 +456,7 @@ export const connectWhatsApp = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     try {
-      const res = await fetch(`${GATEWAY_BASE}/connect`, {
+      const res = await gatewayFetch("/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clinicId: data.clinicId }),
@@ -490,7 +490,7 @@ export const checkWhatsAppStatus = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     try {
-      const res = await fetch(`${GATEWAY_BASE}/status/${encodeURIComponent(data.clinicId)}`, {
+      const res = await gatewayFetch(`/status/${encodeURIComponent(data.clinicId)}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
