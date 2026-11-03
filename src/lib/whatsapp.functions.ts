@@ -2,7 +2,23 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { sendSmsRaw } from "@/lib/sms.functions";
 
-const GATEWAY_BASE = "http://15.207.87.63:3000";
+// The WhatsApp gateway lives on a bare IP. Edge runtimes (the preview/worker
+// environment) refuse direct-IP fetches with Cloudflare's "error code: 1003"
+// (Direct IP access not allowed), so address it via an nip.io hostname alias
+// that resolves to the same server, and fall back to the raw IP on failure.
+const GATEWAY_BASE = "http://15.207.87.63.nip.io:3000";
+const GATEWAY_FALLBACK_BASE = "http://15.207.87.63:3000";
+
+/** Fetch the WhatsApp gateway, retrying via the raw IP if the hostname path is blocked. */
+async function gatewayFetch(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    const res = await fetch(`${GATEWAY_BASE}${path}`, init);
+    if (res.status === 403 || res.status === 502) throw new Error(`gateway blocked (${res.status})`);
+    return res;
+  } catch {
+    return fetch(`${GATEWAY_FALLBACK_BASE}${path}`, init);
+  }
+}
 const MAX_TOTAL_MESSAGES = 7;
 const MAX_TOKEN_UPDATES = 3;
 const SIGNATURE = "— Powered by ClinicQ";
@@ -90,7 +106,7 @@ export function buildMessage(params: {
 
 async function postToGateway(clinicId: string, phone10: string, message: string) {
   try {
-    const res = await fetch(`${GATEWAY_BASE}/send-message`, {
+    const res = await gatewayFetch("/send-message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clinicId, phone: `91${phone10}`, message }),
@@ -440,7 +456,7 @@ export const connectWhatsApp = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     try {
-      const res = await fetch(`${GATEWAY_BASE}/connect`, {
+      const res = await gatewayFetch("/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clinicId: data.clinicId }),
@@ -474,7 +490,7 @@ export const checkWhatsAppStatus = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     try {
-      const res = await fetch(`${GATEWAY_BASE}/status/${encodeURIComponent(data.clinicId)}`, {
+      const res = await gatewayFetch(`/status/${encodeURIComponent(data.clinicId)}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
