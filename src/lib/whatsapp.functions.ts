@@ -35,7 +35,8 @@ type Variant =
   | "doctor_arrived"
   | "token_update"
   | "reminder_24h"
-  | "shift_update";
+  | "shift_update"
+  | "rescheduled";
 
 function fmtTime12(value: string | null | undefined): string {
   if (!value || !/^\d{1,2}:\d{2}$/.test(value)) return "";
@@ -101,6 +102,8 @@ export function buildMessage(params: {
       const newTime = params.tentativeTime ? ` Your updated tentative time: ${params.tentativeTime}.` : "";
       return withSig(`${base} ${delay}${newTime}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     }
+    case "rescheduled":
+      return withSig(`${base} your appointment at ${params.clinicName} with ${doc} has been rescheduled.\nNew date: ${params.date} | New time: ${timeStr || "—"}\n${location}\n\n${DISCLAIMER}`);
   }
 }
 
@@ -523,11 +526,13 @@ export type NotifyType =
   | "queue_update"
   | "next_in_line"
   | "doctor_arrived"
-  | "reminder_24h";
+  | "reminder_24h"
+  | "rescheduled"
+  | "shift_update";
 
 export async function dispatchNotification(
   supabase: any,
-  input: { tokenId: string; messageType: NotifyType; tentativeTime?: string | null },
+  input: { tokenId: string; messageType: NotifyType; tentativeTime?: string | null; delayMinutes?: number | null },
 ): Promise<
   | { ok: true; channel: "whatsapp" | "sms"; status: number; optedIn: boolean }
   | { ok: false; channel: "whatsapp" | "sms" | null; status?: number; error: string }
@@ -568,6 +573,8 @@ export async function dispatchNotification(
     next_in_line: "next_in_line",
     doctor_arrived: "doctor_arrived",
     reminder_24h: "reminder_24h",
+    rescheduled: "rescheduled",
+    shift_update: "shift_update",
   };
 
   if (input.messageType === "doctor_arrived") {
