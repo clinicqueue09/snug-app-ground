@@ -1,18 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
+import { verifyCronSecret, cronUnauthorized } from "@/lib/cron-auth";
 
 // Sends in-app platform notifications to clinics whose trial or subscription
 // ends exactly 7 days from today. Idempotent per (clinic, kind, target_date).
+// Authenticated by the X-Cron-Secret header (shared secret in platform_secrets).
 export const Route = createFileRoute("/api/public/hooks/renewal-reminders")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const auth = request.headers.get("authorization")?.replace("Bearer ", "");
-        const apiKey = request.headers.get("apikey");
-        const expected = process.env.SUPABASE_PUBLISHABLE_KEY!;
-        if (auth !== expected && apiKey !== expected) {
-          return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-        }
+        if (!(await verifyCronSecret(request))) return cronUnauthorized();
 
         const url = process.env.SUPABASE_URL!;
         const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;

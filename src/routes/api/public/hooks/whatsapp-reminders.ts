@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { dispatchNotification } from "@/lib/whatsapp.functions";
+import { verifyCronSecret, cronUnauthorized } from "@/lib/cron-auth";
 
 function combineDT(dateISO: string, time: string | null): Date | null {
   if (!time || !/^\d{1,2}:\d{2}$/.test(time)) return null;
@@ -12,7 +13,9 @@ function combineDT(dateISO: string, time: string | null): Date | null {
 export const Route = createFileRoute("/api/public/hooks/whatsapp-reminders")({
   server: {
     handlers: {
-      POST: async () => {
+      POST: async ({ request }) => {
+        if (!(await verifyCronSecret(request))) return cronUnauthorized();
+
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         const now = Date.now();
