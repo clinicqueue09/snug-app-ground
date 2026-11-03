@@ -2,7 +2,23 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { sendSmsRaw } from "@/lib/sms.functions";
 
-const GATEWAY_BASE = "http://15.207.87.63:3000";
+// The WhatsApp gateway lives on a bare IP. Edge runtimes (the preview/worker
+// environment) refuse direct-IP fetches with Cloudflare's "error code: 1003"
+// (Direct IP access not allowed), so address it via an nip.io hostname alias
+// that resolves to the same server, and fall back to the raw IP on failure.
+const GATEWAY_BASE = "http://15.207.87.63.nip.io:3000";
+const GATEWAY_FALLBACK_BASE = "http://15.207.87.63:3000";
+
+/** Fetch the WhatsApp gateway, retrying via the raw IP if the hostname path is blocked. */
+async function gatewayFetch(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    const res = await fetch(`${GATEWAY_BASE}${path}`, init);
+    if (res.status === 403 || res.status === 502) throw new Error(`gateway blocked (${res.status})`);
+    return res;
+  } catch {
+    return fetch(`${GATEWAY_FALLBACK_BASE}${path}`, init);
+  }
+}
 const MAX_TOTAL_MESSAGES = 7;
 const MAX_TOKEN_UPDATES = 3;
 const SIGNATURE = "— Powered by ClinicQ";
