@@ -408,45 +408,19 @@ export const applyDoctorShiftStatus = createServerFn({ method: "POST" })
       }
     }
 
-    const connected = await clinicIsConnected(supabase, clinicId);
-    const [clinicRes, doctorRes] = await Promise.all([
-      supabase.from("clinics").select("name, address, clinic_mobile").eq("id", clinicId).maybeSingle(),
-      supabase.from("doctors").select("name, specialty").eq("id", data.doctorId).maybeSingle(),
-    ]);
-    const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null }) as any;
-    const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
-
     let sent = 0;
-    if (connected) {
-      const ctx = await computeQueueContext(supabase, clinicId, data.doctorId, todayISO);
-      for (const t of tokens) {
-        if ((t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) continue;
-        const latest = ctx.displayToken.get(t.id) ?? t.token_number ?? null;
-        const msg = buildMessage({
-          variant: "shift_update",
-          patientName: t.patient_name,
-          doctorName: doctor.name,
-          doctorSpecialty: doctor.specialty ?? null,
-          clinicName: clinic.name,
-          clinicAddress: clinic.address,
-          clinicMobile: clinic.clinic_mobile,
-          date: t.appointment_date,
-          time: t.appointment_time,
-          runningTokenNumber: ctx.runningTokenNumber,
-          latestTokenNumber: latest,
-          tentativeTime: t.appointment_time ? fmtTime12(t.appointment_time) : null,
-          delayMinutes,
-        });
-        const res = await postToGateway(clinicId, t.phone_number, msg);
-        if (!res.ok) continue;
-        await (supabase.from("tokens") as any).update({
-          whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
-        }).eq("id", t.id);
-        sent += 1;
-      }
+    for (const t of tokens) {
+      if (!t.appointment_time) continue;
+      const res = await dispatchNotification(supabase, {
+        tokenId: t.id,
+        messageType: "shift_update",
+        tentativeTime: fmtTime12(t.appointment_time),
+        delayMinutes,
+      });
+      if (res.ok) sent += 1;
     }
 
-    return { ok: true as const, sent, shifted: delayMinutes > 0 ? tokens.length : 0, gatewayConfigured: connected };
+    return { ok: true as const, sent, shifted: delayMinutes > 0 ? tokens.length : 0, gatewayConfigured: true };
   });
 
 /**
@@ -616,6 +590,7 @@ export async function dispatchNotification(
       runningTokenNumber: ctx.runningTokenNumber,
       latestTokenNumber: latest,
       tentativeTime: input.tentativeTime ?? null,
+      delayMinutes: input.delayMinutes ?? null,
     });
     sendResult = await postToGateway(t.clinic_id, phone10, message);
   } else {
@@ -656,6 +631,17 @@ export async function dispatchNotification(
         case "reminder_24h":
           smsText = `${base} reminder — your appointment at ${clinic.name} with ${doc} is tomorrow. Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}.${tokenLine}\n${SIGNATURE}`;
           break;
+        case "rescheduled":
+          smsText = `${base} your appointment at ${clinic.name} with ${doc} has been rescheduled to ${t.appointment_date} | ${timeStr || "—"}.${SIGNATURE}`;
+          break;
+        case "shift_update": {
+          const delayLine = input.delayMinutes && input.delayMinutes > 0
+            ? ` doctor shift is delayed by ${input.delayMinutes} minutes at ${clinic.name}.`
+            : ` doctor shift is on time at ${clinic.name}.`;
+          const timeLine = timeStr ? ` Your tentative time: ${timeStr}.` : "";
+          smsText = `${base}${delayLine}${timeLine}${tokenLine}\n${SIGNATURE}`;
+          break;
+        }
         default:
           smsText = `${base} update from ${clinic.name}.${tokenLine}\n${SIGNATURE}`;
       }
