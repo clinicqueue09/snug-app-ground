@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Stethoscope, Eye, EyeOff } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isValidGoogleMapsLink } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -46,9 +46,11 @@ function AuthPage() {
 
   const [clinicName, setClinicName] = useState("");
   const [clinicAddress, setClinicAddress] = useState("");
+  const [clinicMapLink, setClinicMapLink] = useState("");
   const [clinicMobile, setClinicMobile] = useState("");
   const [touched, setTouched] = useState(false);
   const mobileValid = /^[0-9]{10}$/.test(clinicMobile);
+  const mapLinkValid = isValidGoogleMapsLink(clinicMapLink.trim());
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -70,7 +72,8 @@ function AuthPage() {
     e.preventDefault();
     setTouched(true);
     if (!clinicName.trim()) return toast.error("Clinic name is required.");
-    if (!clinicAddress.trim()) return toast.error("Full Clinic Address / Google Map Link is required.");
+    if (!clinicAddress.trim()) return toast.error("Clinic Address is required.");
+    if (!mapLinkValid) return toast.error("Please paste a valid Google Maps location link.");
     if (!mobileValid) return toast.error("Clinic WhatsApp mobile must be exactly 10 digits.");
     setLoading(true);
     const { error } = await supabase.auth.signUp({
@@ -80,6 +83,7 @@ function AuthPage() {
         data: {
           clinic_name: clinicName.trim(),
           clinic_address: clinicAddress.trim(),
+          clinic_map_link: clinicMapLink.trim(),
           clinic_mobile: clinicMobile.trim(),
         },
       },
@@ -137,8 +141,20 @@ function AuthPage() {
                     <Input id="su-cname" required value={clinicName} onChange={(e) => setClinicName(e.target.value)} />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="su-caddr">Full Clinic Address / Google Map Link <span className="text-rose-500">*</span></Label>
-                    <Input id="su-caddr" required value={clinicAddress} onChange={(e) => setClinicAddress(e.target.value)} placeholder="123 Main St, City / https://maps.google.com/…" />
+                    <Label htmlFor="su-caddr">Clinic Address <span className="text-rose-500">*</span></Label>
+                    <Input id="su-caddr" required value={clinicAddress} onChange={(e) => setClinicAddress(e.target.value)} placeholder="123 Main St, City" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="su-map">Google Map Location Link <span className="text-rose-500">*</span></Label>
+                    <Input
+                      id="su-map"
+                      type="url"
+                      required
+                      value={clinicMapLink}
+                      onChange={(e) => setClinicMapLink(e.target.value)}
+                      placeholder="https://maps.app.goo.gl/…"
+                      className={cn(touched && !mapLinkValid && "border-rose-400")}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="su-cmob">Clinic Mobile (Whatsapp Number only) <span className="text-rose-500">*</span></Label>

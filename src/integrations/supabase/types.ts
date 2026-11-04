@@ -36,6 +36,7 @@ export type Database = {
           clinic_mobile: string | null
           created_at: string
           id: string
+          map_link: string | null
           name: string
           status: string
           subscription_rate: number
@@ -49,6 +50,7 @@ export type Database = {
           clinic_mobile?: string | null
           created_at?: string
           id?: string
+          map_link?: string | null
           name?: string
           status?: string
           subscription_rate?: number
@@ -62,6 +64,7 @@ export type Database = {
           clinic_mobile?: string | null
           created_at?: string
           id?: string
+          map_link?: string | null
           name?: string
           status?: string
           subscription_rate?: number

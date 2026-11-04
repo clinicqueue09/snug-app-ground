@@ -59,6 +59,7 @@ export function buildMessage(params: {
   doctorSpecialty: string | null;
   clinicName: string;
   clinicAddress: string;
+  clinicMapLink: string | null;
   clinicMobile: string | null;
   date: string;
   time: string | null;
@@ -69,7 +70,9 @@ export function buildMessage(params: {
 }): string {
   const timeStr = fmtTime12(params.time);
   const contact = params.clinicMobile ? ` Contact: ${params.clinicMobile}.` : "";
-  const location = `Full Clinic Address / Google Map Link: ${params.clinicAddress}.${contact}`;
+  const location =
+    `Clinic Address: ${params.clinicAddress}.${contact}` +
+    (params.clinicMapLink ? `\nLocation: ${params.clinicMapLink}` : "");
   const base = `Hello ${params.patientName},`;
   const doc = doctorLabel(params.doctorName, params.doctorSpecialty);
   const dt = `Date: ${params.date}${timeStr ? ` | Time: ${timeStr}` : ""}`;
@@ -186,12 +189,12 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
     }
 
     const [clinicRes, doctorRes] = await Promise.all([
-      supabase.from("clinics").select("name, address, clinic_mobile").eq("id", t.clinic_id).maybeSingle(),
+      supabase.from("clinics").select("name, address, map_link, clinic_mobile").eq("id", t.clinic_id).maybeSingle(),
       t.doctor_id
         ? supabase.from("doctors").select("name, specialty").eq("id", t.doctor_id).maybeSingle()
         : Promise.resolve({ data: null as any, error: null }),
     ]);
-    const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null }) as any;
+    const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", map_link: null, clinic_mobile: null }) as any;
     const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
 
     const ctx = await computeQueueContext(supabase, t.clinic_id, t.doctor_id, t.appointment_date);
@@ -204,6 +207,7 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
       doctorSpecialty: doctor?.specialty ?? null,
       clinicName: clinic.name,
       clinicAddress: clinic.address,
+      clinicMapLink: clinic.map_link ?? null,
       clinicMobile: clinic.clinic_mobile,
       date: t.appointment_date,
       time: t.appointment_time,
@@ -251,10 +255,10 @@ export const sendDoctorArrivedForDoctor = createServerFn({ method: "POST" })
     }
 
     const [clinicRes, doctorRes] = await Promise.all([
-      supabase.from("clinics").select("name, address, clinic_mobile").eq("id", clinicId).maybeSingle(),
+      supabase.from("clinics").select("name, address, map_link, clinic_mobile").eq("id", clinicId).maybeSingle(),
       supabase.from("doctors").select("name, specialty").eq("id", data.doctorId).maybeSingle(),
     ]);
-    const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null }) as any;
+    const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", map_link: null, clinic_mobile: null }) as any;
     const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
 
     const ctx = await computeQueueContext(supabase, clinicId, data.doctorId, todayISO);
@@ -271,6 +275,7 @@ export const sendDoctorArrivedForDoctor = createServerFn({ method: "POST" })
         doctorSpecialty: doctor.specialty ?? null,
         clinicName: clinic.name,
         clinicAddress: clinic.address,
+        clinicMapLink: clinic.map_link ?? null,
         clinicMobile: clinic.clinic_mobile,
         date: t.appointment_date,
         time: t.appointment_time,
@@ -521,12 +526,12 @@ export async function dispatchNotification(
   }
 
   const [clinicRes, doctorRes] = await Promise.all([
-    supabase.from("clinics").select("name, address, clinic_mobile, whatsapp_connected").eq("id", t.clinic_id).maybeSingle(),
+    supabase.from("clinics").select("name, address, map_link, clinic_mobile, whatsapp_connected").eq("id", t.clinic_id).maybeSingle(),
     t.doctor_id
       ? supabase.from("doctors").select("name, specialty").eq("id", t.doctor_id).maybeSingle()
       : Promise.resolve({ data: null as any, error: null }),
   ]);
-  const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null, whatsapp_connected: false }) as any;
+  const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", map_link: null, clinic_mobile: null, whatsapp_connected: false }) as any;
   const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
 
   const phone10 = String(t.phone_number ?? "").replace(/\D/g, "").slice(-10);
@@ -584,6 +589,7 @@ export async function dispatchNotification(
       doctorSpecialty: doctor?.specialty ?? null,
       clinicName: clinic.name,
       clinicAddress: clinic.address,
+      clinicMapLink: clinic.map_link ?? null,
       clinicMobile: clinic.clinic_mobile,
       date: t.appointment_date,
       time: t.appointment_time,
@@ -599,16 +605,13 @@ export async function dispatchNotification(
     if (input.messageType === "confirmation") {
       const waNumber = String(clinic.clinic_mobile ?? "").replace(/\D/g, "").slice(-10);
       const waLink = waNumber ? `https://wa.me/91${waNumber}?text=Hi` : "";
-      // Clinics store their Google Maps link inside the address field
-      // (e.g. "Kondhwa Budruk / https://maps.app.goo.gl/xxxx") — surface it.
-      const mapLinkMatch = String(clinic.address ?? "").match(/https?:\/\/[^\s]+/);
-      const mapLink = mapLinkMatch?.[0] ?? "";
+      const mapLink = String(clinic.map_link ?? "").trim();
       smsText =
         `Hello ${t.patient_name}, your appointment at ${clinic.name} with ${doc} is confirmed.\n` +
         `Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}\n` +
-        (mapLink || clinic.address ? `Location: ${mapLink || clinic.address}\n` : "") +
+        (mapLink ? `Location: ${mapLink}\n` : "") +
         (waLink
-          ? `To receive updates on WhatsApp, click the link below and send "Hi":\n${waLink}\n`
+          ? `To receive further updates on appointment progress, click the link below and send "Hi" on WhatsApp:\n${waLink}\n`
           : "") +
         `\n${SIGNATURE}`;
     } else {

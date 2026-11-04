@@ -50,7 +50,7 @@ import {
   Shield,
   Timer,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isValidGoogleMapsLink } from "@/lib/utils";
 import { format } from "date-fns";
 import { TimeSelect, to24h, parse24h, formatDisplay } from "@/components/TimeSelect";
 import { WhatsAppSetupCard } from "@/components/WhatsAppSetupCard";
@@ -67,6 +67,7 @@ type Clinic = {
   status: string;
   trial_ends_at: string;
   address: string;
+  map_link: string | null;
   clinic_mobile: string | null;
   avg_time_per_patient: number;
   whatsapp_connected: boolean;
@@ -152,7 +153,7 @@ function Dashboard() {
     const [c, d, t, n] = await Promise.all([
       supabase
         .from("clinics")
-        .select("id,name,status,trial_ends_at,address,clinic_mobile,avg_time_per_patient,whatsapp_connected")
+        .select("id,name,status,trial_ends_at,address,map_link,clinic_mobile,avg_time_per_patient,whatsapp_connected")
         .limit(1)
         .maybeSingle(),
       supabase.from("doctors").select("id,name,specialty,avg_time_per_patient").eq("is_active", true).order("name"),
@@ -1271,14 +1272,17 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(clinic?.name ?? "");
   const [address, setAddress] = useState(clinic?.address ?? "");
+  const [mapLink, setMapLink] = useState(clinic?.map_link ?? "");
   const [mobile, setMobile] = useState(clinic?.clinic_mobile ?? "");
   const [avg, setAvg] = useState(String(clinic?.avg_time_per_patient ?? 10));
   const [saving, setSaving] = useState(false);
+  const mapLinkValid = isValidGoogleMapsLink(mapLink.trim());
 
   useEffect(() => {
     if (open && clinic) {
       setName(clinic.name);
       setAddress(clinic.address);
+      setMapLink(clinic.map_link ?? "");
       setMobile(clinic.clinic_mobile ?? "");
       setAvg(String(clinic.avg_time_per_patient));
     }
@@ -1287,6 +1291,8 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
   const save = async () => {
     if (!clinic) return;
     if (!name.trim() || !address.trim()) return toast.error("Name and address are required.");
+    if (!mapLink.trim() || !isValidGoogleMapsLink(mapLink.trim()))
+      return toast.error("Please paste a valid Google Maps location link.");
     if (mobile && !/^[0-9]{10}$/.test(mobile)) return toast.error("Mobile must be 10 digits.");
     const avgN = parseInt(avg, 10);
     if (!Number.isFinite(avgN) || avgN < 1 || avgN > 240) return toast.error("Avg time must be 1–240 minutes.");
@@ -1296,6 +1302,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
       .update({
         name: name.trim(),
         address: address.trim(),
+        map_link: mapLink.trim() || null,
         clinic_mobile: mobile.trim() || null,
         avg_time_per_patient: avgN,
       })
@@ -1319,6 +1326,11 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
         <DialogHeader>
           <DialogTitle>Clinic Profile</DialogTitle>
         </DialogHeader>
+        {!clinic?.map_link && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Add your Google Map location link
+          </div>
+        )}
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label className="text-xs">
@@ -1328,12 +1340,24 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">
-              Full Clinic Address / Google Map Link <span className="text-rose-500">*</span>
+              Clinic Address <span className="text-rose-500">*</span>
             </Label>
             <Input
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="123 Main St, City / https://maps.google.com/…"
+              placeholder="123 Main St, City"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">
+              Google Map Location Link <span className="text-rose-500">*</span>
+            </Label>
+            <Input
+              type="url"
+              value={mapLink}
+              onChange={(e) => setMapLink(e.target.value)}
+              placeholder="https://maps.app.goo.gl/…"
+              className={cn(mapLink && !mapLinkValid && "border-rose-400")}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
