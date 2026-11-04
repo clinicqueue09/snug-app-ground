@@ -59,6 +59,7 @@ export function buildMessage(params: {
   doctorSpecialty: string | null;
   clinicName: string;
   clinicAddress: string;
+  clinicMapLink: string | null;
   clinicMobile: string | null;
   date: string;
   time: string | null;
@@ -69,7 +70,9 @@ export function buildMessage(params: {
 }): string {
   const timeStr = fmtTime12(params.time);
   const contact = params.clinicMobile ? ` Contact: ${params.clinicMobile}.` : "";
-  const location = `Full Clinic Address / Google Map Link: ${params.clinicAddress}.${contact}`;
+  const location =
+    `Clinic Address: ${params.clinicAddress}.${contact}` +
+    (params.clinicMapLink ? `\nLocation: ${params.clinicMapLink}` : "");
   const base = `Hello ${params.patientName},`;
   const doc = doctorLabel(params.doctorName, params.doctorSpecialty);
   const dt = `Date: ${params.date}${timeStr ? ` | Time: ${timeStr}` : ""}`;
@@ -186,12 +189,12 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
     }
 
     const [clinicRes, doctorRes] = await Promise.all([
-      supabase.from("clinics").select("name, address, clinic_mobile").eq("id", t.clinic_id).maybeSingle(),
+      supabase.from("clinics").select("name, address, map_link, clinic_mobile").eq("id", t.clinic_id).maybeSingle(),
       t.doctor_id
         ? supabase.from("doctors").select("name, specialty").eq("id", t.doctor_id).maybeSingle()
         : Promise.resolve({ data: null as any, error: null }),
     ]);
-    const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", clinic_mobile: null }) as any;
+    const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", map_link: null, clinic_mobile: null }) as any;
     const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
 
     const ctx = await computeQueueContext(supabase, t.clinic_id, t.doctor_id, t.appointment_date);
@@ -204,6 +207,7 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
       doctorSpecialty: doctor?.specialty ?? null,
       clinicName: clinic.name,
       clinicAddress: clinic.address,
+      clinicMapLink: clinic.map_link ?? null,
       clinicMobile: clinic.clinic_mobile,
       date: t.appointment_date,
       time: t.appointment_time,
