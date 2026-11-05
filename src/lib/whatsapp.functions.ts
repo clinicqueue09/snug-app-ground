@@ -135,6 +135,7 @@ async function postToGateway(clinicId: string, phone10: string, message: string)
     });
     return { ok: res.ok, status: res.status };
   } catch (e: any) {
+    if (e instanceof Error && e.message.includes("GATEWAY_API_KEY")) throw e;
     return { ok: false, status: 0, error: e?.message ?? "network error" };
   }
 }
