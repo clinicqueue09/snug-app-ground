@@ -1360,6 +1360,18 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
               className={cn(mapLink && !mapLinkValid && "border-rose-400")}
             />
           </div>
+          <div className="space-y-2 rounded-md border bg-muted/40 p-3">
+            <p className="text-xs font-medium text-foreground">WhatsApp location preview</p>
+            <div className="rounded-md bg-background px-3 py-2 text-xs leading-relaxed text-foreground">
+              <p className="break-words">
+                Clinic Address: {address.trim() || "Your clinic address"}.
+                {mobile.trim() ? ` Contact: ${mobile.trim()}.` : ""}
+              </p>
+              <p className="mt-1 break-all text-primary">
+                Location: {mapLink.trim() || "Your Google Maps link"}
+              </p>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">
