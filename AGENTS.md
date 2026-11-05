@@ -8,5 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
-- Address the AWS WhatsApp gateway via `http://15.207.87.63.nip.io:3000` (hostname alias), never a bare IP in fetch URLs — the edge/worker runtime blocks direct-IP fetches with Cloudflare "error code: 1003"; `gatewayFetch()` in `src/lib/whatsapp.functions.ts` falls back to the raw IP for Node/dev.
+- Address the AWS WhatsApp gateway via `http://13.204.59.137.nip.io:3000` (hostname alias), never a bare IP in fetch URLs — the edge/worker runtime blocks direct-IP fetches with Cloudflare "error code: 1003"; `gatewayFetch()` in `src/lib/whatsapp.functions.ts` falls back to `13.204.59.137` for Node/dev.
 - Scheduled hooks (`/api/public/hooks/*` called by pg_cron) authenticate with the `X-Cron-Secret` header via `verifyCronSecret()` in `src/lib/cron-auth.ts`; the shared secret lives in the RLS-locked `public.platform_secrets` table so both the database cron job and the server route read it — never authenticate these hooks with the publishable key.
