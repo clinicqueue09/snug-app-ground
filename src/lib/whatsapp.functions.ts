@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { sendSmsRaw } from "@/lib/sms.functions";
 
@@ -6,17 +6,32 @@ import { sendSmsRaw } from "@/lib/sms.functions";
 // environment) refuse direct-IP fetches with Cloudflare's "error code: 1003"
 // (Direct IP access not allowed), so address it via an nip.io hostname alias
 // that resolves to the same server, and fall back to the raw IP on failure.
-const GATEWAY_BASE = "http://15.207.87.63.nip.io:3000";
-const GATEWAY_FALLBACK_BASE = "http://15.207.87.63:3000";
+const GATEWAY_BASE = "http://13.204.59.137.nip.io:3000";
+const GATEWAY_FALLBACK_BASE = "http://13.204.59.137:3000";
+
+const readGatewayApiKey = createServerOnlyFn(() => process.env["GATEWAY_API_KEY"]);
+
+function requireGatewayApiKey(): string {
+  const apiKey = readGatewayApiKey();
+  if (!apiKey) {
+    const error = "GATEWAY_API_KEY is not configured; WhatsApp gateway requests are disabled.";
+    console.error(`[whatsapp gateway] ${error}`);
+    throw new Error(error);
+  }
+  return apiKey;
+}
 
 /** Fetch the WhatsApp gateway, retrying via the raw IP if the hostname path is blocked. */
 async function gatewayFetch(path: string, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  headers.set("x-gateway-key", requireGatewayApiKey());
+  const requestInit = { ...init, headers };
   try {
-    const res = await fetch(`${GATEWAY_BASE}${path}`, init);
+    const res = await fetch(`${GATEWAY_BASE}${path}`, requestInit);
     if (res.status === 403 || res.status === 502) throw new Error(`gateway blocked (${res.status})`);
     return res;
   } catch {
-    return fetch(`${GATEWAY_FALLBACK_BASE}${path}`, init);
+    return fetch(`${GATEWAY_FALLBACK_BASE}${path}`, requestInit);
   }
 }
 const MAX_TOTAL_MESSAGES = 7;
@@ -112,9 +127,10 @@ export function buildMessage(params: {
 
 async function postToGateway(clinicId: string, phone10: string, message: string) {
   try {
+    const gatewayKey = requireGatewayApiKey();
     const res = await gatewayFetch("/send-message", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-gateway-key": gatewayKey },
       body: JSON.stringify({ clinicId, phone: `91${phone10}`, message }),
     });
     return { ok: res.ok, status: res.status };
@@ -217,7 +233,7 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
     });
 
     const result = await postToGateway(t.clinic_id, t.phone_number, message);
-    if (!result.ok) return { ok: false as const, status: result.status, error: `Send failed (${result.status})` };
+    if (!result.ok) return { ok: false as const, status: result.status, error: result.error ?? `Send failed (${result.status})` };
 
     const patch: Record<string, unknown> = {
       whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
