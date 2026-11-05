@@ -441,6 +441,9 @@ export const applyDoctorShiftStatus = createServerFn({ method: "POST" })
         tentativeTime: fmtTime12(t.appointment_time),
         delayMinutes,
       });
+      if (!res.ok && res.error.includes("GATEWAY_API_KEY")) {
+        return { ok: false as const, error: res.error };
+      }
       if (res.ok) sent += 1;
     }
 
