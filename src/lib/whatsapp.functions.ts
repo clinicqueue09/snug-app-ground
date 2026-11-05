@@ -135,7 +135,6 @@ async function postToGateway(clinicId: string, phone10: string, message: string)
     });
     return { ok: res.ok, status: res.status };
   } catch (e: any) {
-    if (e instanceof Error && e.message.includes("GATEWAY_API_KEY")) throw e;
     return { ok: false, status: 0, error: e?.message ?? "network error" };
   }
 }
@@ -300,7 +299,10 @@ export const sendDoctorArrivedForDoctor = createServerFn({ method: "POST" })
         latestTokenNumber: latest,
       });
       const res = await postToGateway(clinicId, t.phone_number, msg);
-      if (!res.ok) continue;
+      if (!res.ok) {
+        if (res.error?.includes("GATEWAY_API_KEY")) return { ok: false as const, error: res.error };
+        continue;
+      }
       await (supabase.from("tokens") as any).update({
         whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
         doctor_arrived_sent_at: new Date().toISOString(),
