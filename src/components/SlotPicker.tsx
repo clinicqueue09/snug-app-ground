@@ -41,8 +41,8 @@ export function SlotPicker({
 }: {
   clinicId: string;
   doctorId: string;
-  clinicDuration: number;
-  doctorDuration: number | null;
+  clinicDuration?: number;
+  doctorDuration?: number | null;
   value: SelectedSlot | null;
   onChange: (value: SelectedSlot | null) => void;
   excludeTokenId?: string;
@@ -50,6 +50,8 @@ export function SlotPicker({
   const [availability, setAvailability] = useState<AvailabilityRow[]>([]);
   const [daysOff, setDaysOff] = useState<Set<string>>(new Set());
   const [appointments, setAppointments] = useState<Record<string, AppointmentSlotRow[]>>({});
+  const [savedClinicDuration, setSavedClinicDuration] = useState<number | null>(clinicDuration ?? null);
+  const [savedDoctorDuration, setSavedDoctorDuration] = useState<number | null>(doctorDuration ?? null);
   const [selectedDate, setSelectedDate] = useState(value?.date ?? localDateKey(startOfToday()));
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => new Date());
@@ -70,7 +72,7 @@ export function SlotPicker({
     last.setHours(0, 0, 0, 0);
     last.setDate(last.getDate() + 30);
     const lastDate = localDateKey(last);
-    const [availabilityResult, timeOffResult, tokensResult] = await Promise.all([
+    const [availabilityResult, timeOffResult, tokensResult, clinicResult, doctorResult] = await Promise.all([
       supabase
         .from("doctor_availability")
         .select("weekday,start_time,end_time")
@@ -85,14 +87,20 @@ export function SlotPicker({
         .lte("off_date", lastDate),
       supabase
         .from("tokens")
-        .select("id,clinic_id,appointment_date,appointment_time,status")
+        .select("id,appointment_date,appointment_time,status")
         .eq("clinic_id", clinicId)
         .eq("doctor_id", doctorId)
         .gte("appointment_date", firstDate)
         .lte("appointment_date", lastDate)
         .neq("status", "cancelled"),
+      clinicDuration == null
+        ? supabase.from("clinics").select("avg_time_per_patient").eq("id", clinicId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      doctorDuration === undefined
+        ? supabase.from("doctors").select("avg_time_per_patient").eq("id", doctorId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
     ]);
-    const failed = availabilityResult.error ?? timeOffResult.error ?? tokensResult.error;
+    const failed = availabilityResult.error ?? timeOffResult.error ?? tokensResult.error ?? clinicResult.error ?? doctorResult.error;
     if (failed) {
       if (showErrors) toast.error(`Could not load available appointments: ${failed.message}`);
       setLoading(false);
@@ -100,6 +108,8 @@ export function SlotPicker({
     }
     setAvailability((availabilityResult.data ?? []) as AvailabilityRow[]);
     setDaysOff(new Set((timeOffResult.data ?? []).map((row) => row.off_date)));
+    if (clinicDuration == null) setSavedClinicDuration(clinicResult.data?.avg_time_per_patient ?? 10);
+    if (doctorDuration === undefined) setSavedDoctorDuration(doctorResult.data?.avg_time_per_patient ?? null);
     const grouped: Record<string, AppointmentSlotRow[]> = {};
     for (const row of tokensResult.data ?? []) {
       const dateKey = row.appointment_date;
@@ -108,7 +118,7 @@ export function SlotPicker({
     setAppointments(grouped);
     setNow(new Date());
     setLoading(false);
-  }, [clinicId, doctorId]);
+  }, [clinicId, doctorId, clinicDuration, doctorDuration]);
 
   useEffect(() => {
     void loadSchedule(true);
@@ -120,7 +130,7 @@ export function SlotPicker({
     if (value?.date) setSelectedDate(value.date);
   }, [value?.date]);
 
-  const slotLength = clampSlotLength(doctorDuration, clinicDuration);
+  const slotLength = clampSlotLength(doctorDuration ?? savedDoctorDuration, clinicDuration ?? savedClinicDuration ?? 10);
   const dayInfos = useMemo<DayInfo[]>(() => days.map(({ date, key }) => {
     if (daysOff.has(key)) return { date, key, slots: [], free: [], state: "leave" };
     const sessions = sessionsForWeekday(date.getDay(), availability);
