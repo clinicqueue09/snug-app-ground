@@ -223,10 +223,7 @@ function Dashboard() {
 
   const updateStatus = async (t: Token, status: Token["status"]) => {
     const { error } = await supabase.from("tokens").update({ status }).eq("id", t.id);
-    if (error) {
-      setAvg(doctor.avg_time_per_patient);
-      return toast.error(error.message);
-    }
+    if (error) return toast.error(error.message);
     toast.success("Updated");
     if (status === "completed" || status === "no_show" || status === "in_consultation") runAdvance(t);
   };
@@ -1623,7 +1620,10 @@ function DoctorControlCard({
     setSaving(true);
     const { error } = await supabase.from("doctors").update({ avg_time_per_patient: parsed }).eq("id", doctor.id);
     setSaving(false);
-    if (error) return toast.error(error.message);
+    if (error) {
+      setAvg(doctor.avg_time_per_patient);
+      return toast.error(error.message);
+    }
     toast.success("Avg time updated");
     onAvgChanged();
   };
