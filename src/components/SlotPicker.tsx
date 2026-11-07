@@ -91,7 +91,6 @@ export function SlotPicker({
         .from("tokens")
         .select("id,appointment_date,appointment_time,status")
         .eq("clinic_id", clinicId)
-        .eq("clinic_id", clinicId)
         .eq("doctor_id", doctorId)
         .gte("appointment_date", firstDate)
         .lte("appointment_date", lastDate)
