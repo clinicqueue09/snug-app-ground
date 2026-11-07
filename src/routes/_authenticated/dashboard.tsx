@@ -55,6 +55,7 @@ import { format } from "date-fns";
 import { TimeSelect, to24h, parse24h, formatDisplay } from "@/components/TimeSelect";
 import { DurationSelect } from "@/components/DurationSelect";
 import { SlotPicker } from "@/components/SlotPicker";
+import { DoctorDaySchedule } from "@/components/DoctorDaySchedule";
 import { DoctorWorkingHoursEditor } from "@/components/DoctorWorkingHoursEditor";
 import { WhatsAppSetupCard } from "@/components/WhatsAppSetupCard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -393,7 +394,7 @@ function Dashboard() {
 
         <section className="min-w-0 space-y-4">
           <Tabs defaultValue="today">
-            <TabsList className="grid h-auto w-full grid-cols-3 sm:inline-flex sm:w-auto">
+            <TabsList className="grid h-auto w-full grid-cols-4 sm:inline-flex sm:w-auto">
               <TabsTrigger value="today" className="gap-1 px-1.5 text-xs sm:px-3 sm:text-sm">
                 <Clock className="h-3.5 w-3.5" />
                 Today's Queue
@@ -401,6 +402,10 @@ function Dashboard() {
               <TabsTrigger value="upcoming" className="gap-1 px-1.5 text-xs sm:px-3 sm:text-sm">
                 <CalendarClock className="h-3.5 w-3.5" />
                 Upcoming
+              </TabsTrigger>
+              <TabsTrigger value="schedule" className="gap-1 px-1.5 text-xs sm:px-3 sm:text-sm">
+                <CalendarIcon className="h-3.5 w-3.5" />
+                Schedule
               </TabsTrigger>
               <TabsTrigger value="history" className="gap-1 px-1.5 text-xs sm:px-3 sm:text-sm">
                 <CalendarClock className="h-3.5 w-3.5" />
@@ -467,6 +472,24 @@ function Dashboard() {
                 onUpdate={updateStatus}
                 onEdited={loadAll}
                 emptyText="No upcoming appointments."
+              />
+            </TabsContent>
+
+            <TabsContent value="schedule" className="space-y-4">
+              <DoctorDaySchedule
+                clinicId={clinic?.id}
+                clinicName={clinic?.name ?? ""}
+                clinicDuration={clinic?.avg_time_per_patient ?? 10}
+                doctors={doctors}
+                tokens={tokens}
+                trialExpired={trialExpired}
+                renderReschedule={(t) => <RescheduleDialog token={t} onSaved={loadAll} />}
+                onBooked={async (createdToken) => {
+                  await loadAll();
+                  const res = await notify({ data: { tokenId: createdToken.id, messageType: "confirmation" } });
+                  if (res.ok) toast.success(res.channel === "sms" ? "SMS confirmation sent" : "WhatsApp confirmation sent");
+                  else if (res.error) toast.warning(res.error);
+                }}
               />
             </TabsContent>
 
@@ -1053,11 +1076,11 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
           Reschedule
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Reschedule appointment</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {token.doctor_id ? (
             <SlotPicker
               clinicId={token.clinic_id}
@@ -1107,7 +1130,7 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
           </>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
