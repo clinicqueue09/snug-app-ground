@@ -229,21 +229,23 @@ export function SlotPicker({
               : day.state === "full" ? "Full"
                 : day.state === "leave" ? "Leave" : day.state === "error" ? "Unavailable" : "Off";
           return (
-            <button
+            <Button
               key={day.key}
               type="button"
+              size="sm"
+              variant="outline"
               disabled={day.state === "leave" || day.state === "off" || day.state === "full" || day.state === "error"}
               onClick={() => {
                 setSelectedDate(day.key);
                 if (value?.date !== day.key) onChange(null);
               }}
               aria-pressed={isSelected}
-              className={`flex h-[88px] w-[72px] shrink-0 flex-col items-center justify-center gap-1 rounded-md border text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-80 ${style} ${isSelected ? "ring-2 ring-primary ring-offset-1" : ""}`}
+              className={`flex h-[88px] w-[72px] shrink-0 flex-col items-center justify-center gap-1 rounded-md border p-0 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-80 ${style} ${isSelected ? "ring-2 ring-primary ring-offset-1" : ""}`}
             >
               <span className="font-medium">{format(day.date, "EEE")}</span>
               <span className="text-lg font-semibold leading-none">{format(day.date, "d")}</span>
               <span>{note}</span>
-            </button>
+            </Button>
           );
         })}
       </div>
