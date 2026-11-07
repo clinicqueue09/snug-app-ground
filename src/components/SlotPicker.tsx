@@ -91,6 +91,7 @@ export function SlotPicker({
         .from("tokens")
         .select("id,appointment_date,appointment_time,status")
         .eq("clinic_id", clinicId)
+        .eq("clinic_id", clinicId)
         .eq("doctor_id", doctorId)
         .gte("appointment_date", firstDate)
         .lte("appointment_date", lastDate)
@@ -137,7 +138,9 @@ export function SlotPicker({
     if (daysOff.has(key)) return { date, key, slots: [], free: [], state: "leave" };
     const sessions = sessionsForWeekday(date.getDay(), availability);
     if (sessions.length === 0) return { date, key, slots: [], free: [], state: "off" };
-    const todayMinute = date.toDateString() === now.toDateString() ? now.getHours() * 60 + now.getMinutes() : undefined;
+    const todayMinute = date.toDateString() === now.toDateString()
+      ? now.getHours() * 60 + now.getMinutes() + (now.getSeconds() > 0 || now.getMilliseconds() > 0 ? 1 : 0)
+      : undefined;
     const slots = makeSlotTimes(sessions, slotLength, todayMinute);
     if (slots.length === 0) return { date, key, slots, free: [], state: "full" };
     const bookedForDate = appointments[key] ?? [];
