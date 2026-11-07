@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { clampSlotLength, isSlotBooked, makeSlotTimes, sessionsForWeekday } from "../src/lib/scheduling";
+import {
+  clampSlotLength,
+  isSlotBooked,
+  makeSlotTimes,
+  sessionsForWeekday,
+  validateAvailabilityDraft,
+} from "../src/lib/scheduling";
 
 describe("appointment scheduling rules", () => {
   test("uses doctor duration, clinic default, then ten minutes, clamped to five through sixty", () => {
@@ -34,5 +40,16 @@ describe("appointment scheduling rules", () => {
     expect(isSlotBooked("09:00", appointments, 20)).toBe(true);
     expect(isSlotBooked("09:00", appointments, 20, "booked")).toBe(false);
     expect(isSlotBooked("09:20", appointments, 20)).toBe(true);
+  });
+
+  test("requires a working day and non-overlapping ordered sessions", () => {
+    const session1 = { start_time: "09:00", end_time: "13:00" };
+    expect(validateAvailabilityDraft({ days: [], session1 })).toBe("Select at least one working day.");
+    expect(validateAvailabilityDraft({ days: [1], session1: { start_time: "13:00", end_time: "09:00" } }))
+      .toBe("Session 1 must end after it starts.");
+    expect(validateAvailabilityDraft({ days: [1], session1, session2: { start_time: "12:00", end_time: "17:00" } }))
+      .toBe("Session 2 must start after Session 1 ends.");
+    expect(validateAvailabilityDraft({ days: [1], session1, session2: { start_time: "17:00", end_time: "21:00" } }))
+      .toBeNull();
   });
 });

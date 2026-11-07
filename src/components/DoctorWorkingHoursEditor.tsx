@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
-import type { AvailabilityRow } from "@/lib/scheduling";
+import { validateAvailabilityDraft, type AvailabilityRow } from "@/lib/scheduling";
 
 const DAYS = [
   { label: "Mon", weekday: 1 },
@@ -80,18 +80,12 @@ export function DoctorWorkingHoursEditor({ doctorId, clinicId }: { doctorId: str
 
   const summary = useMemo(() => sessionSummary(savedRows), [savedRows]);
 
-  const validate = () => {
-    if (selectedDays.length === 0) return "Select at least one working day.";
-    if (session1.end_time <= session1.start_time) return "Session 1 must end after it starts.";
-    if (hasSession2) {
-      if (session2.end_time <= session2.start_time) return "Session 2 must end after it starts.";
-      if (session2.start_time < session1.end_time) return "Session 2 must start after Session 1 ends.";
-    }
-    return null;
-  };
-
   const save = async () => {
-    const validationError = validate();
+    const validationError = validateAvailabilityDraft({
+      days: selectedDays,
+      session1,
+      session2: hasSession2 ? session2 : undefined,
+    });
     if (validationError) return toast.error(validationError);
     setSaving(true);
     const oldRowsQuery = await supabase

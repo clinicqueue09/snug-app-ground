@@ -5,6 +5,11 @@ export type AppointmentSlotRow = {
   appointment_time: string | null;
   status: string;
 };
+export type AvailabilityDraft = {
+  days: number[];
+  session1: WorkSession;
+  session2?: WorkSession;
+};
 
 export const DEFAULT_WORK_SESSIONS: WorkSession[] = [
   { start_time: "09:00", end_time: "13:00" },
@@ -59,4 +64,16 @@ export function isSlotBooked(
     const appointmentStart = appointmentHour * 60 + appointmentMinute;
     return appointmentStart >= start && appointmentStart < end;
   });
+}
+
+export function validateAvailabilityDraft(draft: AvailabilityDraft): string | null {
+  if (draft.days.length === 0) return "Select at least one working day.";
+  if (draft.session1.end_time <= draft.session1.start_time) return "Session 1 must end after it starts.";
+  if (draft.session2) {
+    if (draft.session2.end_time <= draft.session2.start_time) return "Session 2 must end after it starts.";
+    if (draft.session2.start_time < draft.session1.end_time) {
+      return "Session 2 must start after Session 1 ends.";
+    }
+  }
+  return null;
 }
