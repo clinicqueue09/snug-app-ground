@@ -989,7 +989,14 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
 
   useEffect(() => {
     if (!open) return;
-    setSlot(token.appointment_time ? { date: token.appointment_date, time: token.appointment_time } : null);
+    const todayKey = format(new Date(), "yyyy-MM-dd");
+    const horizonDate = new Date();
+    horizonDate.setDate(horizonDate.getDate() + 30);
+    const withinPickerHorizon = token.appointment_date >= todayKey
+      && token.appointment_date <= format(horizonDate, "yyyy-MM-dd");
+    setSlot(token.appointment_time && withinPickerHorizon
+      ? { date: token.appointment_date, time: token.appointment_time }
+      : null);
     setDate(token.appointment_date ? new Date(`${token.appointment_date}T00:00:00`) : new Date());
     const current = parse24h(token.appointment_time);
     setHour(current.hour);

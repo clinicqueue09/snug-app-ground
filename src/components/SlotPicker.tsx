@@ -14,7 +14,7 @@ import {
 } from "@/lib/scheduling";
 
 type SelectedSlot = { date: string; time: string };
-type DayInfo = { date: Date; key: string; slots: string[]; free: string[]; state: "leave" | "off" | "full" | "plenty" | "few" };
+type DayInfo = { date: Date; key: string; slots: string[]; free: string[]; state: "leave" | "off" | "full" | "plenty" | "few" | "error" };
 
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -56,6 +56,7 @@ export function SlotPicker({
   const [savedDoctorDuration, setSavedDoctorDuration] = useState<number | null>(doctorDuration ?? null);
   const [selectedDate, setSelectedDate] = useState(value?.date ?? localDateKey(startOfToday()));
   const [loading, setLoading] = useState(true);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
 
   const days = useMemo(() => {
@@ -104,10 +105,12 @@ export function SlotPicker({
     ]);
     const failed = availabilityResult.error ?? timeOffResult.error ?? tokensResult.error ?? clinicResult.error ?? doctorResult.error;
     if (failed) {
+      setScheduleError(failed.message);
       if (showErrors) toast.error(`Could not load available appointments: ${failed.message}`);
       setLoading(false);
       return;
     }
+    setScheduleError(null);
     setAvailability((availabilityResult.data ?? []) as AvailabilityRow[]);
     setDaysOff(new Set((timeOffResult.data ?? []).map((row) => row.off_date)));
     if (clinicDuration == null) setSavedClinicDuration(clinicResult.data?.avg_time_per_patient ?? 10);
@@ -134,6 +137,7 @@ export function SlotPicker({
 
   const slotLength = clampSlotLength(doctorDuration ?? savedDoctorDuration, clinicDuration ?? savedClinicDuration ?? 10);
   const dayInfos = useMemo<DayInfo[]>(() => days.map(({ date, key }) => {
+    if (scheduleError) return { date, key, slots: [], free: [], state: "error" };
     if (daysOff.has(key)) return { date, key, slots: [], free: [], state: "leave" };
     const sessions = sessionsForWeekday(date.getDay(), availability);
     if (sessions.length === 0) return { date, key, slots: [], free: [], state: "off" };
@@ -151,7 +155,7 @@ export function SlotPicker({
       free,
       state: free.length === 0 ? "full" : free.length <= 3 ? "few" : "plenty",
     };
-  }), [days, daysOff, availability, now, slotLength, appointments, excludeTokenId]);
+  }), [days, daysOff, availability, now, slotLength, appointments, excludeTokenId, scheduleError]);
 
   const chosenDay = dayInfos.find((day) => day.key === selectedDate) ?? dayInfos[0];
   const firstFree = dayInfos.find((day) => day.free.length > 0);
@@ -218,12 +222,12 @@ export function SlotPicker({
           const note = day.state === "plenty" ? `${day.free.length} free`
             : day.state === "few" ? `${day.free.length} left`
               : day.state === "full" ? "Full"
-                : day.state === "leave" ? "Leave" : "Off";
+                : day.state === "leave" ? "Leave" : day.state === "error" ? "Unavailable" : "Off";
           return (
             <button
               key={day.key}
               type="button"
-              disabled={day.state === "leave" || day.state === "off" || day.state === "full"}
+              disabled={day.state === "leave" || day.state === "off" || day.state === "full" || day.state === "error"}
               onClick={() => {
                 setSelectedDate(day.key);
                 if (value?.date !== day.key) onChange(null);
@@ -240,6 +244,7 @@ export function SlotPicker({
       </div>
       {chosenDay && (
         <div className="space-y-3">
+          {scheduleError && <p role="alert" className="text-sm text-destructive">Schedule unavailable. Refresh to try again.</p>}
           {groups.map((group) => group.slots.length > 0 && (
             <section key={group.label} className="space-y-2">
               <h4 className="text-xs font-semibold text-muted-foreground">{group.label}</h4>
@@ -265,6 +270,7 @@ export function SlotPicker({
             </section>
           ))}
           {chosenDay.state === "leave" && <p className="text-sm text-muted-foreground">Doctor is on leave.</p>}
+          {chosenDay.state === "error" && <p className="text-sm text-muted-foreground">Available appointments could not be loaded.</p>}
           {(chosenDay.state === "off" || chosenDay.state === "full") && <p className="text-sm text-muted-foreground">No available times for this day.</p>}
           <p className="text-xs font-medium text-foreground">
             Selected: {value?.date === chosenDay.key ? `${format(chosenDay.date, "EEE, MMM d")}, ${formatTime12(value.time)}` : "Choose a time"}
