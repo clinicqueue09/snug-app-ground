@@ -975,6 +975,9 @@ function InlineTimeEdit({ token, onSaved }: { token: Token; onSaved: () => void 
 function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => void }) {
   const notify = useServerFn(notifyPatient);
   const [open, setOpen] = useState(false);
+  const [slot, setSlot] = useState<{ date: string; time: string } | null>(
+    token.appointment_time ? { date: token.appointment_date, time: token.appointment_time } : null,
+  );
   const [date, setDate] = useState<Date | undefined>(
     token.appointment_date ? new Date(token.appointment_date + "T00:00:00") : new Date(),
   );
@@ -985,13 +988,14 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
-    if (!date) return toast.error("Pick a date");
+    if (token.doctor_id && !slot) return toast.error("Pick an available appointment slot.");
+    if (!token.doctor_id && !date) return toast.error("Pick a date");
     setSaving(true);
     const { error } = await supabase
       .from("tokens")
       .update({
-        appointment_date: format(date, "yyyy-MM-dd"),
-        appointment_time: to24h(hour, minute, meridiem),
+        appointment_date: token.doctor_id && slot ? slot.date : format(date ?? new Date(), "yyyy-MM-dd"),
+        appointment_time: token.doctor_id && slot ? slot.time : to24h(hour, minute, meridiem),
       })
       .eq("id", token.id);
     setSaving(false);
@@ -1029,6 +1033,16 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
           <DialogTitle>Reschedule appointment</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {token.doctor_id ? (
+            <SlotPicker
+              clinicId={token.clinic_id}
+              doctorId={token.doctor_id}
+              value={slot}
+              onChange={setSlot}
+              excludeTokenId={token.id}
+            />
+          ) : (
+          <>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-slate-700">Appointment Date</Label>
             <Popover>
@@ -1065,6 +1079,8 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
               }}
             />
           </div>
+          </>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
@@ -1081,11 +1097,13 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
 
 function AddPatientCard({
   clinicId,
+  clinicDuration,
   doctors,
   disabled,
   onAdded,
 }: {
   clinicId?: string;
+  clinicDuration: number;
   doctors: Doctor[];
   disabled: boolean;
   onAdded: (t: Token) => void;
@@ -1093,6 +1111,7 @@ function AddPatientCard({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [doctorId, setDoctorId] = useState<string>("");
+  const [slot, setSlot] = useState<{ date: string; time: string } | null>(null);
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [hour, setHour] = useState("");
   const [minute, setMinute] = useState("");
@@ -1109,13 +1128,13 @@ function AddPatientCard({
     if (!name.trim()) return toast.error("Patient name required");
     if (!phoneValid) return toast.error("Enter a valid 10-digit phone number");
     if (!doctorId) return toast.error("Doctor is required");
-    if (!date) return toast.error("Pick an appointment date");
-    if (!hour || !minute) return toast.error("Pick an appointment time");
+    if (doctorId && !slot) return toast.error("Pick an available appointment slot.");
+    if (!doctorId && !date) return toast.error("Pick an appointment date");
     // Block past date-times (validated in local clinic time)
-    const apptTime24 = to24h(hour, minute, meridiem);
+    const apptTime24 = doctorId && slot ? slot.time : to24h(hour, minute, meridiem);
     if (!apptTime24) return toast.error("Pick a valid appointment time");
     const [ah, am] = apptTime24.split(":").map((n) => parseInt(n, 10));
-    const apptDT = new Date(date);
+    const apptDT = doctorId && slot ? new Date(`${slot.date}T00:00:00`) : new Date(date ?? new Date());
     apptDT.setHours(ah, am, 0, 0);
     if (apptDT.getTime() < Date.now()) {
       return toast.error("Appointment must be in the future.");
@@ -1129,15 +1148,16 @@ function AddPatientCard({
         phone_number: phone,
         doctor_id: doctorId,
         token_number: 0,
-        appointment_date: format(date, "yyyy-MM-dd"),
-        appointment_time: to24h(hour, minute, meridiem),
+        appointment_date: doctorId && slot ? slot.date : format(date ?? new Date(), "yyyy-MM-dd"),
+        appointment_time: apptTime24,
       })
       .select("*")
       .single();
     setSaving(false);
     if (error) {
       if ((error as any).code === "23505" || /duplicate|unique/i.test(error.message)) {
-        return toast.error("This slot is already booked for this doctor. Pick another time.");
+        setSlot(null);
+        return toast.error("This slot was just booked. Please pick another time.");
       }
       return toast.error(error.message);
     }
@@ -1145,6 +1165,7 @@ function AddPatientCard({
     setName("");
     setPhone("");
     setDoctorId("");
+    setSlot(null);
     setHour("");
     setMinute("");
     setMeridiem("AM");
@@ -1201,7 +1222,7 @@ function AddPatientCard({
             <Label className="text-xs font-medium text-slate-700">
               Doctor <span className="text-rose-500">*</span>
             </Label>
-            <Select value={doctorId} onValueChange={setDoctorId}>
+            <Select value={doctorId} onValueChange={(value) => { setDoctorId(value); setSlot(null); }}>
               <SelectTrigger className="border-slate-200">
                 <SelectValue placeholder="Select a doctor" />
               </SelectTrigger>
@@ -1216,6 +1237,17 @@ function AddPatientCard({
               </SelectContent>
             </Select>
           </div>
+          {doctorId && clinicId ? (
+            <SlotPicker
+              key={doctorId}
+              clinicId={clinicId}
+              doctorId={doctorId}
+              clinicDuration={clinicDuration}
+              doctorDuration={doctors.find((doctor) => doctor.id === doctorId)?.avg_time_per_patient ?? null}
+              value={slot}
+              onChange={setSlot}
+            />
+          ) : <>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-slate-700">Date</Label>
             <Popover>
@@ -1260,6 +1292,7 @@ function AddPatientCard({
               }}
             />
           </div>
+          </>}
           <Button onClick={submit} disabled={saving || disabled} className="w-full bg-sky-600 hover:bg-sky-700">
             {saving ? "Adding..." : "Add to Queue"}
           </Button>
