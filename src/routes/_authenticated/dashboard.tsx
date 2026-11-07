@@ -1604,21 +1604,15 @@ function DoctorControlCard({
   onDoctorArrived: (doctorId: string) => void | Promise<void>;
   onAvgChanged: () => void;
 }) {
-  const [avg, setAvg] = useState<string>(
-    doctor.avg_time_per_patient == null ? "" : String(doctor.avg_time_per_patient),
-  );
+  const [avg, setAvg] = useState<number | null>(doctor.avg_time_per_patient);
   const [saving, setSaving] = useState(false);
   const [arriving, setArriving] = useState(false);
   useEffect(() => {
-    setAvg(doctor.avg_time_per_patient == null ? "" : String(doctor.avg_time_per_patient));
+    setAvg(doctor.avg_time_per_patient);
   }, [doctor.avg_time_per_patient]);
 
-  const saveAvg = async () => {
-    const trimmed = avg.trim();
-    const parsed = trimmed === "" ? null : parseInt(trimmed, 10);
-    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 1 || parsed > 240)) {
-      return toast.error("Avg time must be 1–240 minutes (or blank).");
-    }
+  const saveAvg = async (parsed: number | null) => {
+    setAvg(parsed);
     if (parsed === doctor.avg_time_per_patient) return;
     setSaving(true);
     const { error } = await supabase.from("doctors").update({ avg_time_per_patient: parsed }).eq("id", doctor.id);
@@ -1636,17 +1630,12 @@ function DoctorControlCard({
       </div>
       <div className="flex items-center gap-2">
         <Label className="text-xs text-slate-600 whitespace-nowrap">Avg (min)</Label>
-        <Input
-          inputMode="numeric"
+        <DurationSelect
           value={avg}
-          onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))}
-          onBlur={saveAvg}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
-          placeholder="—"
-          disabled={saving}
-          className="h-8 text-sm"
+          allowClinicDefault
+          onChange={saveAvg}
+          ariaLabel={`${doctor.name} average time per patient`}
+          className="h-8 w-36 text-xs"
         />
       </div>
       <Button
