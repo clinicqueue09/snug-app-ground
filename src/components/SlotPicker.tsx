@@ -252,7 +252,7 @@ export function SlotPicker({
                       variant={selected ? "default" : "outline"}
                       disabled={booked || loading}
                       onClick={() => selectSlot(chosenDay.key, time)}
-                      className={`h-9 text-xs ${booked ? "text-muted-foreground line-through opacity-60" : ""} ${selected ? "bg-sky-600 text-white hover:bg-sky-700" : ""}`}
+                      className={`h-9 text-xs ${booked ? "text-muted-foreground line-through opacity-60" : ""} ${selected ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
                     >
                       {formatTime12(time)}
                     </Button>

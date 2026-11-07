@@ -223,7 +223,10 @@ function Dashboard() {
 
   const updateStatus = async (t: Token, status: Token["status"]) => {
     const { error } = await supabase.from("tokens").update({ status }).eq("id", t.id);
-    if (error) return toast.error(error.message);
+    if (error) {
+      setAvg(doctor.avg_time_per_patient);
+      return toast.error(error.message);
+    }
     toast.success("Updated");
     if (status === "completed" || status === "no_show" || status === "in_consultation") runAdvance(t);
   };
