@@ -1,3 +1,4 @@
+import { tokenNoteFor } from "./token-note";
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { sendSmsRaw } from "@/lib/sms.functions";
@@ -83,6 +84,7 @@ export function buildMessage(params: {
   latestTokenNumber: number | null;
   tentativeTime?: string | null;
   delayMinutes?: number | null;
+  tokenNote?: string | null;
 }): string {
   const timeStr = fmtTime12(params.time);
   const contact = params.clinicMobile ? ` Contact: ${params.clinicMobile}.` : "";
@@ -98,12 +100,13 @@ export function buildMessage(params: {
           params.latestTokenNumber ?? "—"
         }.`
       : "";
+  const note = params.tokenNote ? `\n${params.tokenNote}` : "";
 
   switch (params.variant) {
     case "confirmation":
-      return withSig(`${base} your appointment at ${params.clinicName} with ${doc} is confirmed.\n${dt}\n${location}\n\n${DISCLAIMER}`);
+      return withSig(`${base} your appointment at ${params.clinicName} with ${doc} is confirmed.\n${dt}${note}\n${location}\n\n${DISCLAIMER}`);
     case "reminder_24h":
-      return withSig(`${base} reminder — your appointment at ${params.clinicName} with ${doc} is tomorrow.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
+      return withSig(`${base} reminder — your appointment at ${params.clinicName} with ${doc} is tomorrow.\n${dt}\n${location}\n\n${DISCLAIMER}`);
     case "doctor_arrived":
       return withSig(`${base} ${doc} has arrived at ${params.clinicName} and consultations are starting.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     case "next_in_line":
@@ -122,7 +125,7 @@ export function buildMessage(params: {
       return withSig(`${base} ${delay}${newTime}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     }
     case "rescheduled":
-      return withSig(`${base} your appointment at ${params.clinicName} with ${doc} has been rescheduled.\nNew date: ${params.date} | New time: ${timeStr || "—"}\n${location}\n\n${DISCLAIMER}`);
+      return withSig(`${base} your appointment at ${params.clinicName} with ${doc} has been rescheduled.\nNew date: ${params.date} | New time: ${timeStr || "—"}${note}\n${location}\n\n${DISCLAIMER}`);
   }
 }
 
@@ -621,10 +624,12 @@ export async function dispatchNotification(
   let sendResult: { ok: boolean; status: number; error?: string };
   let channel: "whatsapp" | "sms";
 
+  const ctx = await computeQueueContext(supabase, t.clinic_id, t.doctor_id, t.appointment_date);
+  const latest = ctx.displayToken.get(t.id) ?? t.token_number ?? null;
+  const needsNote = input.messageType === "confirmation" || input.messageType === "rescheduled";
+
   if (useWhatsApp) {
     channel = "whatsapp";
-    const ctx = await computeQueueContext(supabase, t.clinic_id, t.doctor_id, t.appointment_date);
-    const latest = ctx.displayToken.get(t.id) ?? t.token_number ?? null;
     const message = buildMessage({
       variant: waVariantMap[input.messageType],
       patientName: t.patient_name,
@@ -640,6 +645,7 @@ export async function dispatchNotification(
       latestTokenNumber: latest,
       tentativeTime: input.tentativeTime ?? null,
       delayMinutes: input.delayMinutes ?? null,
+      tokenNote: needsNote ? tokenNoteFor(t.appointment_date, latest, "whatsapp") : null,
     });
     sendResult = await postToGateway(t.clinic_id, phone10, message);
   } else {
@@ -652,13 +658,14 @@ export async function dispatchNotification(
       smsText =
         `Hello ${t.patient_name}, your appointment at ${clinic.name} with ${doc} is confirmed.\n` +
         `Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}\n` +
+        `${tokenNoteFor(t.appointment_date, latest, "sms")}\n` +
         (mapLink ? `Location: ${mapLink}\n` : "") +
         (waLink
           ? `To receive further updates on appointment progress, click the link below and send "Hi" on WhatsApp:\n${waLink}\n`
           : "") +
         `\n${SIGNATURE}`;
     } else {
-      const tokenLine = t.token_number != null ? ` Token #${t.token_number}.` : "";
+      const tokenLine = latest != null ? ` Token #${latest}.` : "";
       const timing = input.tentativeTime ? ` Tentative time: ${input.tentativeTime}.` : "";
       const base = `Hello ${t.patient_name},`;
       switch (input.messageType) {
@@ -675,10 +682,10 @@ export async function dispatchNotification(
           smsText = `${base} ${doc} has arrived at ${clinic.name}. Consultations are starting.${tokenLine}\n${SIGNATURE}`;
           break;
         case "reminder_24h":
-          smsText = `${base} reminder — your appointment at ${clinic.name} with ${doc} is tomorrow. Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}.${tokenLine}\n${SIGNATURE}`;
+          smsText = `${base} reminder — your appointment at ${clinic.name} with ${doc} is tomorrow. Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}.\n${SIGNATURE}`;
           break;
         case "rescheduled":
-          smsText = `${base} your appointment at ${clinic.name} with ${doc} has been rescheduled to ${t.appointment_date} | ${timeStr || "—"}.${SIGNATURE}`;
+          smsText = `${base} your appointment at ${clinic.name} with ${doc} has been rescheduled to ${t.appointment_date} | ${timeStr || "—"}. ${tokenNoteFor(t.appointment_date, latest, "sms")}\n${SIGNATURE}`;
           break;
         case "shift_update": {
           const delayLine = input.delayMinutes && input.delayMinutes > 0
