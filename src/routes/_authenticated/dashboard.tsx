@@ -108,19 +108,19 @@ type PlatformNotification = {
 };
 
 const statusMeta: Record<Token["status"], { label: string; className: string; icon: React.ElementType }> = {
-  waiting: { label: "Waiting", className: "bg-sky-100 text-sky-700 border-sky-200", icon: Clock },
+  waiting: { label: "Waiting", className: "bg-info-surface text-info border-info", icon: Clock },
   in_consultation: {
     label: "In Consultation",
-    className: "bg-blue-100 text-blue-700 border-blue-200",
+    className: "bg-info-surface text-info border-info",
     icon: PlayCircle,
   },
   completed: {
     label: "Completed",
-    className: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    className: "bg-success-surface text-success border-success",
     icon: CheckCircle2,
   },
-  no_show: { label: "No Show", className: "bg-rose-100 text-rose-700 border-rose-200", icon: XCircle },
-  cancelled: { label: "Cancelled", className: "bg-slate-100 text-slate-500 border-slate-200", icon: XCircle },
+  no_show: { label: "No Show", className: "bg-danger-surface text-danger border-danger", icon: XCircle },
+  cancelled: { label: "Cancelled", className: "bg-muted text-muted-foreground border-border", icon: XCircle },
 };
 
 const todayISO = () => {
@@ -274,24 +274,24 @@ function Dashboard() {
   const unreadNotifs = notifs.filter((n) => !n.read_at).length;
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="dashboard-theme min-h-screen bg-background">
       {trialExpired && (
-        <div className="bg-rose-600 text-white px-6 py-3 flex items-center justify-center gap-2 text-sm font-medium">
+        <div className="bg-danger text-primary-foreground px-6 py-3 flex items-center justify-center gap-2 text-sm font-medium">
           <AlertTriangle className="h-4 w-4" />
           Your 21-day free trial has expired. Please upgrade to continue adding patients.
         </div>
       )}
       {showTrialBanner && (
-        <div className="bg-sky-50 border-b border-sky-100 text-sky-900 px-6 py-2.5 flex items-center justify-center gap-2 text-sm">
-          <Sparkles className="h-4 w-4 text-sky-600" />
+        <div className="bg-info-surface border-b border-info text-info px-6 py-2.5 flex items-center justify-center gap-2 text-sm">
+          <Sparkles className="h-4 w-4 text-info" />
           <span className="font-medium">
             {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left
           </span>
-          <span className="text-sky-700">in your 21-day free trial</span>
+          <span className="text-info">in your 21-day free trial</span>
         </div>
       )}
 
-      <header className="border-b border-slate-200 bg-white">
+      <header className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3 min-w-0">
             <img
@@ -299,16 +299,16 @@ function Dashboard() {
               alt="ClinicQ logo"
               width={40}
               height={40}
-              className="h-10 w-10 rounded-xl shadow-sm shrink-0 bg-white object-contain"
+              className="h-10 w-10 rounded-xl shadow-sm shrink-0 bg-card object-contain"
             />
             <div className="min-w-0">
               <div className="flex items-baseline gap-2 flex-wrap">
-                <span className="font-semibold text-slate-900 leading-tight truncate">
+                <span className="font-semibold text-foreground leading-tight truncate">
                   {clinic?.name ?? "Clinic Queue"}
                 </span>
               </div>
-              {clinic?.address && <div className="text-sm text-slate-600 truncate">{clinic.address}</div>}
-              <div className="text-xs text-slate-500 truncate">{email}</div>
+              {clinic?.address && <div className="text-sm text-muted-foreground truncate">{clinic.address}</div>}
+              <div className="text-xs text-muted-foreground truncate">{email}</div>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -318,7 +318,7 @@ function Dashboard() {
             {isAdmin && (
               <Link
                 to="/admin/feedback"
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 px-3 py-1.5 text-xs font-medium"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card text-foreground hover:bg-muted px-3 py-1.5 text-xs font-medium"
               >
                 <Shield className="h-3.5 w-3.5" /> Admin
               </Link>
@@ -328,7 +328,7 @@ function Dashboard() {
               size="icon"
               onClick={handleSignOut}
               aria-label="Sign out"
-              className="text-slate-500 hover:text-slate-900"
+              className="text-muted-foreground hover:text-foreground"
             >
               <LogOut className="h-4 w-4" />
             </Button>
@@ -375,8 +375,8 @@ function Dashboard() {
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <section className="lg:col-span-1">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-6">
+        <section className="min-w-0">
           <AddPatientCard
             clinicId={clinic?.id}
             clinicDuration={clinic?.avg_time_per_patient ?? 10}
@@ -391,18 +391,18 @@ function Dashboard() {
           />
         </section>
 
-        <section className="lg:col-span-2 space-y-4">
+        <section className="min-w-0 space-y-4">
           <Tabs defaultValue="today">
-            <TabsList>
-              <TabsTrigger value="today" className="gap-1.5">
+            <TabsList className="grid h-auto w-full grid-cols-3 sm:inline-flex sm:w-auto">
+              <TabsTrigger value="today" className="gap-1 px-1.5 text-xs sm:px-3 sm:text-sm">
                 <Clock className="h-3.5 w-3.5" />
                 Today's Queue
               </TabsTrigger>
-              <TabsTrigger value="upcoming" className="gap-1.5">
+              <TabsTrigger value="upcoming" className="gap-1 px-1.5 text-xs sm:px-3 sm:text-sm">
                 <CalendarClock className="h-3.5 w-3.5" />
                 Upcoming
               </TabsTrigger>
-              <TabsTrigger value="history" className="gap-1.5">
+              <TabsTrigger value="history" className="gap-1 px-1.5 text-xs sm:px-3 sm:text-sm">
                 <CalendarClock className="h-3.5 w-3.5" />
                 History (30d)
               </TabsTrigger>
@@ -411,8 +411,8 @@ function Dashboard() {
             <TabsContent value="today" className="space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Today's Queue</h2>
-                  <p className="text-sm text-slate-500 mt-0.5">
+                  <h2 className="text-xl font-semibold text-foreground tracking-tight">Today's Queue</h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">
                     {todayTokens.length} {todayTokens.length === 1 ? "patient" : "patients"}
                   </p>
                 </div>
@@ -422,8 +422,8 @@ function Dashboard() {
                     className={cn(
                       "px-3 py-1.5 rounded-full text-xs font-medium border",
                       doctorFilter === "all"
-                        ? "bg-sky-600 text-white border-sky-600"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50",
+                        ? "bg-info text-primary-foreground border-info"
+                        : "bg-card text-muted-foreground border-border hover:bg-muted",
                     )}
                   >
                     All
@@ -435,8 +435,8 @@ function Dashboard() {
                       className={cn(
                         "px-3 py-1.5 rounded-full text-xs font-medium border",
                         doctorFilter === d.id
-                          ? "bg-sky-600 text-white border-sky-600"
-                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50",
+                          ? "bg-info text-primary-foreground border-info"
+                          : "bg-card text-muted-foreground border-border hover:bg-muted",
                       )}
                     >
                       {d.name}
@@ -457,8 +457,8 @@ function Dashboard() {
 
             <TabsContent value="upcoming" className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Upcoming Appointments</h2>
-                <p className="text-sm text-slate-500 mt-0.5">{upcomingTokens.length} scheduled</p>
+                <h2 className="text-xl font-semibold text-foreground tracking-tight">Upcoming Appointments</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">{upcomingTokens.length} scheduled</p>
               </div>
               <UpcomingList
                 tokens={upcomingTokens}
@@ -472,8 +472,8 @@ function Dashboard() {
 
             <TabsContent value="history" className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900 tracking-tight">History</h2>
-                <p className="text-sm text-slate-500 mt-0.5">Last 30 days · {historyTokens.length} records</p>
+                <h2 className="text-xl font-semibold text-foreground tracking-tight">History</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">Last 30 days · {historyTokens.length} records</p>
               </div>
               <QueueTable
                 tokens={historyTokens}
@@ -519,10 +519,10 @@ function NotificationsBell({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="border-slate-200 relative">
+        <Button variant="outline" size="sm" className="border-border relative">
           <Bell className="h-4 w-4" />
           {unread > 0 && (
-            <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-rose-600 text-white text-[10px] leading-4 text-center">
+            <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-danger text-primary-foreground text-[10px] leading-4 text-center">
               {unread}
             </span>
           )}
@@ -531,17 +531,17 @@ function NotificationsBell({
       <PopoverContent align="end" className="w-80 p-0">
         <div className="flex items-center justify-between px-3 py-2 border-b">
           <div className="text-sm font-semibold">Notifications</div>
-          <button className="text-xs text-sky-600 hover:underline" onClick={markAllRead}>
+          <button className="text-xs text-info hover:underline" onClick={markAllRead}>
             Mark all read
           </button>
         </div>
         <div className="max-h-80 overflow-auto divide-y">
-          {notifs.length === 0 && <div className="p-6 text-center text-sm text-slate-500">No notifications yet.</div>}
+          {notifs.length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No notifications yet.</div>}
           {notifs.map((n) => (
-            <div key={n.id} className={cn("p-3 text-sm", !n.read_at && "bg-sky-50/60")}>
-              <div className="font-medium text-slate-900">{n.title}</div>
-              <div className="text-slate-600 text-xs mt-0.5">{n.body}</div>
-              <div className="text-slate-400 text-[10px] mt-1">{new Date(n.created_at).toLocaleString()}</div>
+            <div key={n.id} className={cn("p-3 text-sm", !n.read_at && "bg-info-surface/60")}>
+              <div className="font-medium text-foreground">{n.title}</div>
+              <div className="text-muted-foreground text-xs mt-0.5">{n.body}</div>
+              <div className="text-muted-foreground text-[10px] mt-1">{new Date(n.created_at).toLocaleString()}</div>
             </div>
           ))}
         </div>
@@ -570,11 +570,11 @@ function QueueTable({
   readOnly?: boolean;
 }) {
   return (
-    <Card className="border-slate-200 shadow-sm">
+    <Card className="border-border shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+            <tr className="border-b border-border text-left text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
               <th className="px-3 py-2 w-14">Token</th>
               <th className="px-3 py-2">Patient</th>
               <th className="px-3 py-2 hidden lg:table-cell">Phone</th>
@@ -585,16 +585,16 @@ function QueueTable({
               <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-border">
             {loading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                   Loading…
                 </td>
               </tr>
             ) : tokens.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                   {emptyText}
                 </td>
               </tr>
@@ -646,19 +646,19 @@ function UpcomingList({
     }
   }
   return (
-    <Card className="border-slate-200 shadow-sm">
+    <Card className="border-border shadow-sm">
       {loading ? (
-        <div className="px-4 py-10 text-center text-slate-400 text-sm">Loading…</div>
+        <div className="px-4 py-10 text-center text-muted-foreground text-sm">Loading…</div>
       ) : tokens.length === 0 ? (
-        <div className="px-4 py-10 text-center text-slate-400 text-sm">{emptyText}</div>
+        <div className="px-4 py-10 text-center text-muted-foreground text-sm">{emptyText}</div>
       ) : (
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-border">
           {groups.map((g) => (
             <div key={g.date}>
-              <div className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50/80">
+              <div className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/80">
                 {g.label}
               </div>
-              <div className="divide-y divide-slate-50">
+              <div className="divide-y divide-border">
                 {g.items.map((t) => (
                   <UpcomingRow
                     key={t.id}
@@ -704,12 +704,12 @@ function UpcomingRow({
   };
 
   return (
-    <div className={cn("flex items-center gap-2 px-3 py-1.5 min-w-0", reported && "bg-emerald-50/40")}>
-      <span className="w-16 shrink-0 text-xs font-medium text-slate-700">{formatDisplay(token.appointment_time)}</span>
+    <div className={cn("flex items-center gap-2 px-3 py-1.5 min-w-0", reported && "bg-success-surface/40")}>
+      <span className="w-16 shrink-0 text-xs font-medium text-foreground">{formatDisplay(token.appointment_time)}</span>
       <div className="flex-1 min-w-0">
-        <span className="font-medium text-slate-900 text-sm truncate block">{token.patient_name}</span>
+        <span className="font-medium text-foreground text-sm truncate block">{token.patient_name}</span>
       </div>
-      <span className="hidden sm:block text-xs text-slate-500 truncate max-w-[140px]">{doctor?.name ?? "—"}</span>
+      <span className="hidden sm:block text-xs text-muted-foreground truncate max-w-[140px]">{doctor?.name ?? "—"}</span>
       <Badge variant="outline" className={cn("gap-1 font-medium text-[11px] px-1.5 py-0.5 shrink-0", meta.className)}>
         <Icon className="h-3 w-3" />
         <span className="hidden sm:inline">{meta.label}</span>
@@ -719,7 +719,7 @@ function UpcomingRow({
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 px-2 text-emerald-700 hover:bg-emerald-50 text-xs"
+            className="h-7 px-2 text-success hover:bg-success-surface text-xs"
             onClick={markReported}
           >
             Reported
@@ -729,7 +729,7 @@ function UpcomingRow({
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 px-2 text-blue-700 hover:bg-blue-50 text-xs"
+            className="h-7 px-2 text-info hover:bg-info-surface text-xs"
             onClick={() => onUpdate(token, "in_consultation")}
           >
             Start
@@ -739,7 +739,7 @@ function UpcomingRow({
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 px-2 text-rose-700 hover:bg-rose-50 text-xs"
+            className="h-7 px-2 text-danger hover:bg-danger-surface text-xs"
             onClick={() => onUpdate(token, "no_show")}
           >
             No Show
@@ -782,14 +782,14 @@ function TokenRow({
   };
 
   return (
-    <tr className={cn("hover:bg-slate-50/60 transition-colors", reported && "bg-emerald-50/40")}>
+    <tr className={cn("hover:bg-muted/60 transition-colors", reported && "bg-success-surface/40")}>
       <td className="px-3 py-2">
         <div
           className={cn(
             "h-8 w-8 rounded-lg font-semibold text-xs flex items-center justify-center",
             reported
-              ? "bg-emerald-100 text-emerald-700 ring-2 ring-emerald-300"
-              : "bg-sky-50 text-sky-700",
+              ? "bg-success-surface text-success ring-2 ring-success"
+              : "bg-info-surface text-info",
           )}
         >
           {token.displayToken}
@@ -798,26 +798,26 @@ function TokenRow({
       <td className="px-3 py-2">
         <div className="flex flex-col min-w-0">
           {readOnly ? (
-            <span className="font-medium text-slate-900 truncate">{token.patient_name}</span>
+            <span className="font-medium text-foreground truncate">{token.patient_name}</span>
           ) : (
             <InlineNameEdit token={token} onSaved={onEdited} />
           )}
-          <span className="text-[11px] text-slate-500 lg:hidden truncate">{token.phone_number}</span>
+          <span className="text-[11px] text-muted-foreground lg:hidden truncate">{token.phone_number}</span>
           {reported && (
-            <span className="text-[10px] font-medium text-emerald-700 uppercase tracking-wide">Reported</span>
+            <span className="text-[10px] font-medium text-success uppercase tracking-wide">Reported</span>
           )}
         </div>
       </td>
-      <td className="px-3 py-2 text-slate-600 hidden lg:table-cell text-xs">{token.phone_number}</td>
-      <td className="px-3 py-2 text-slate-600 hidden md:table-cell text-xs truncate max-w-[140px]">
+      <td className="px-3 py-2 text-muted-foreground hidden lg:table-cell text-xs">{token.phone_number}</td>
+      <td className="px-3 py-2 text-muted-foreground hidden md:table-cell text-xs truncate max-w-[140px]">
         {doctor?.name ?? "—"}
       </td>
       {showDate && (
-        <td className="px-3 py-2 text-slate-600 hidden md:table-cell text-xs">{token.appointment_date}</td>
+        <td className="px-3 py-2 text-muted-foreground hidden md:table-cell text-xs">{token.appointment_date}</td>
       )}
       <td className="px-3 py-2">
         {readOnly ? (
-          <span className="text-xs text-slate-700">{formatDisplay(token.appointment_time)}</span>
+          <span className="text-xs text-foreground">{formatDisplay(token.appointment_time)}</span>
         ) : (
           <InlineTimeEdit token={token} onSaved={onEdited} />
         )}
@@ -834,7 +834,7 @@ function TokenRow({
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 px-2 text-emerald-700 hover:bg-emerald-50 text-xs"
+              className="h-7 px-2 text-success hover:bg-success-surface text-xs"
               onClick={markReported}
             >
               Reported
@@ -844,7 +844,7 @@ function TokenRow({
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 px-2 text-blue-700 hover:bg-blue-50 text-xs"
+              className="h-7 px-2 text-info hover:bg-info-surface text-xs"
               onClick={() => onUpdate(token, "in_consultation")}
             >
               Start
@@ -854,7 +854,7 @@ function TokenRow({
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 px-2 text-emerald-700 hover:bg-emerald-50 text-xs"
+              className="h-7 px-2 text-success hover:bg-success-surface text-xs"
               onClick={() => onUpdate(token, "completed")}
             >
               Complete
@@ -864,7 +864,7 @@ function TokenRow({
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 px-2 text-rose-700 hover:bg-rose-50 text-xs"
+              className="h-7 px-2 text-danger hover:bg-danger-surface text-xs"
               onClick={() => onUpdate(token, "no_show")}
             >
               No Show
@@ -900,7 +900,7 @@ function InlineNameEdit({ token, onSaved }: { token: Token; onSaved: () => void 
     return (
       <button
         onClick={() => setEditing(true)}
-        className="text-left font-medium text-slate-900 hover:text-sky-700 inline-flex items-center gap-1 group"
+        className="text-left font-medium text-foreground hover:text-info inline-flex items-center gap-1 group"
       >
         {token.patient_name}
         <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60" />
@@ -954,7 +954,7 @@ function InlineTimeEdit({ token, onSaved }: { token: Token; onSaved: () => void 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button className="text-slate-700 hover:text-sky-700 text-sm">{formatDisplay(token.appointment_time)}</button>
+        <button className="text-foreground hover:text-info text-sm">{formatDisplay(token.appointment_time)}</button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-3" align="start">
         <TimeSelect
@@ -971,7 +971,7 @@ function InlineTimeEdit({ token, onSaved }: { token: Token; onSaved: () => void 
           <Button size="sm" variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button size="sm" className="bg-sky-600 hover:bg-sky-700" onClick={save}>
+          <Button size="sm" className="bg-info hover:bg-info" onClick={save}>
             Save
           </Button>
         </div>
@@ -1048,7 +1048,7 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="ghost" className="text-slate-600 hover:bg-slate-100">
+        <Button size="sm" variant="ghost" className="text-muted-foreground hover:bg-muted">
           <CalendarClock className="h-3.5 w-3.5 mr-1" />
           Reschedule
         </Button>
@@ -1069,7 +1069,7 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
           ) : (
           <>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-700">Appointment Date</Label>
+            <Label className="text-xs font-medium text-foreground">Appointment Date</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -1092,7 +1092,7 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
             </Popover>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-700">Appointment Time</Label>
+            <Label className="text-xs font-medium text-foreground">Appointment Time</Label>
             <TimeSelect
               hour={hour}
               minute={minute}
@@ -1111,7 +1111,7 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={saving} className="bg-sky-600 hover:bg-sky-700">
+          <Button onClick={save} disabled={saving} className="bg-info hover:bg-info">
             {saving ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
@@ -1202,14 +1202,14 @@ function AddPatientCard({
   };
 
   return (
-    <Card className="border-slate-200 shadow-sm sticky top-6">
+    <Card className="border-border shadow-sm sticky top-6">
       <CardHeader>
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center">
+          <div className="h-8 w-8 rounded-lg bg-info-surface text-info flex items-center justify-center">
             <UserPlus className="h-4 w-4" />
           </div>
           <div>
-            <CardTitle className="text-base text-slate-900">Add Patient</CardTitle>
+            <CardTitle className="text-base text-foreground">Add Patient</CardTitle>
             <CardDescription className="text-xs">
               Insert between existing slots — tokens re-number automatically.
             </CardDescription>
@@ -1217,22 +1217,22 @@ function AddPatientCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <fieldset disabled={disabled} className="space-y-4 disabled:opacity-50">
+        <fieldset disabled={disabled} className="min-w-0 space-y-4 disabled:opacity-50">
           <div className="space-y-1.5">
-            <Label htmlFor="pname" className="text-xs font-medium text-slate-700">
-              Patient Name <span className="text-rose-500">*</span>
+            <Label htmlFor="pname" className="text-xs font-medium text-foreground">
+              Patient Name <span className="text-danger">*</span>
             </Label>
             <Input
               id="pname"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Jane Doe"
-              className="border-slate-200"
+              className="border-border"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="phone" className="text-xs font-medium text-slate-700">
-              Phone Number <span className="text-rose-500">*</span>
+            <Label htmlFor="phone" className="text-xs font-medium text-foreground">
+              Phone Number <span className="text-danger">*</span>
             </Label>
             <Input
               id="phone"
@@ -1241,20 +1241,20 @@ function AddPatientCard({
               onBlur={() => setTouched(true)}
               inputMode="numeric"
               placeholder="10-digit mobile number"
-              className={cn("border-slate-200", phoneError && "border-rose-400 focus-visible:ring-rose-400")}
+              className={cn("border-border", phoneError && "border-danger focus-visible:ring-danger")}
             />
-            {phoneError && <p className="text-xs text-rose-600">Enter exactly 10 digits.</p>}
+            {phoneError && <p className="text-xs text-danger">Enter exactly 10 digits.</p>}
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-700">
-              Doctor <span className="text-rose-500">*</span>
+            <Label className="text-xs font-medium text-foreground">
+              Doctor <span className="text-danger">*</span>
             </Label>
             <Select value={doctorId} onValueChange={(value) => { setDoctorId(value); setSlot(null); }}>
-              <SelectTrigger className="border-slate-200">
+              <SelectTrigger className="border-border">
                 <SelectValue placeholder="Select a doctor" />
               </SelectTrigger>
               <SelectContent>
-                {doctors.length === 0 && <div className="px-2 py-1.5 text-sm text-slate-500">No doctors yet</div>}
+                {doctors.length === 0 && <div className="px-2 py-1.5 text-sm text-muted-foreground">No doctors yet</div>}
                 {doctors.map((d) => (
                   <SelectItem key={d.id} value={d.id}>
                     {d.name}
@@ -1277,13 +1277,13 @@ function AddPatientCard({
             />
           ) : <>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-700">Date</Label>
+            <Label className="text-xs font-medium text-foreground">Date</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   className={cn(
-                    "w-full justify-start text-left font-normal border-slate-200",
+                    "w-full justify-start text-left font-normal border-border",
                     !date && "text-muted-foreground",
                   )}
                 >
@@ -1308,7 +1308,7 @@ function AddPatientCard({
             </Popover>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-700">Time</Label>
+            <Label className="text-xs font-medium text-foreground">Time</Label>
             <TimeSelect
               hour={hour}
               minute={minute}
@@ -1321,12 +1321,12 @@ function AddPatientCard({
             />
           </div>
           </>}
-          <Button onClick={submit} disabled={saving || disabled} className="w-full bg-sky-600 hover:bg-sky-700">
+          <Button onClick={submit} disabled={saving || disabled} className="w-full bg-info hover:bg-info">
             {saving ? "Adding..." : "Add to Queue"}
           </Button>
         </fieldset>
         {disabled && (
-          <p className="text-xs text-rose-600 text-center">Adding patients is disabled while the trial is expired.</p>
+          <p className="text-xs text-danger text-center">Adding patients is disabled while the trial is expired.</p>
         )}
       </CardContent>
     </Card>
@@ -1388,7 +1388,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="border-slate-200 text-slate-700">
+        <Button size="sm" variant="outline" className="border-border text-foreground">
           <Settings className="h-3.5 w-3.5 mr-1.5" />
           Profile
         </Button>
@@ -1398,20 +1398,20 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
           <DialogTitle>Clinic Profile</DialogTitle>
         </DialogHeader>
         {!clinic?.map_link && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <div className="rounded-md border border-warning bg-warning-surface px-3 py-2 text-xs text-warning">
             Add your Google Map location link
           </div>
         )}
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label className="text-xs">
-              Clinic Name <span className="text-rose-500">*</span>
+              Clinic Name <span className="text-danger">*</span>
             </Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">
-              Clinic Address <span className="text-rose-500">*</span>
+              Clinic Address <span className="text-danger">*</span>
             </Label>
             <Input
               value={address}
@@ -1421,14 +1421,14 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">
-              Google Map Location Link <span className="text-rose-500">*</span>
+              Google Map Location Link <span className="text-danger">*</span>
             </Label>
             <Input
               type="url"
               value={mapLink}
               onChange={(e) => setMapLink(e.target.value)}
               placeholder="https://maps.app.goo.gl/…"
-              className={cn(mapLink && !mapLinkValid && "border-rose-400")}
+              className={cn(mapLink && !mapLinkValid && "border-danger")}
             />
           </div>
           <div className="space-y-2 rounded-md border bg-muted/40 p-3">
@@ -1446,7 +1446,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">
-                Clinic's Whatsapp Number <span className="text-rose-500">*</span>
+                Clinic's Whatsapp Number <span className="text-danger">*</span>
               </Label>
               <Input
                 required
@@ -1469,7 +1469,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={saving} className="bg-sky-600 hover:bg-sky-700">
+          <Button onClick={save} disabled={saving} className="bg-info hover:bg-info">
             {saving ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
@@ -1523,7 +1523,7 @@ function ManageDoctorsDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="border-slate-200 text-slate-700">
+        <Button size="sm" variant="outline" className="border-border text-foreground">
           Doctors
         </Button>
       </DialogTrigger>
@@ -1540,19 +1540,19 @@ function ManageDoctorsDialog({
             <Input placeholder="Specialty *" value={specialty} onChange={(e) => setSpecialty(e.target.value)} />
             <DurationSelect value={avg} allowClinicDefault onChange={setAvg} ariaLabel="New doctor appointment duration" />
           </div>
-          <Button onClick={add} size="sm" className="bg-sky-600 hover:bg-sky-700">
+          <Button onClick={add} size="sm" className="bg-info hover:bg-info">
             Add doctor
           </Button>
           <div className="space-y-2 pt-2">
-            {doctors.length === 0 && <div className="text-sm text-slate-500">No doctors yet.</div>}
+            {doctors.length === 0 && <div className="text-sm text-muted-foreground">No doctors yet.</div>}
             {doctors.map((d) => (
-              <div key={d.id} className="flex flex-wrap items-center gap-2 border border-slate-200 rounded-md px-3 py-2">
+              <div key={d.id} className="flex flex-wrap items-center gap-2 border border-border rounded-md px-3 py-2">
                 <div className="text-sm flex-1 min-w-[180px]">
-                  <div className="font-medium text-slate-900 truncate">{d.name}</div>
-                  {d.specialty && <div className="text-xs text-slate-500 truncate">{d.specialty}</div>}
+                  <div className="font-medium text-foreground truncate">{d.name}</div>
+                  {d.specialty && <div className="text-xs text-muted-foreground truncate">{d.specialty}</div>}
                 </div>
                 <div className="flex items-center gap-1">
-                  <Timer className="h-3.5 w-3.5 text-slate-400" />
+                  <Timer className="h-3.5 w-3.5 text-muted-foreground" />
                   <DurationSelect
                     value={d.avg_time_per_patient}
                     allowClinicDefault
@@ -1564,7 +1564,7 @@ function ManageDoctorsDialog({
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="text-rose-600 hover:bg-rose-50"
+                  className="text-danger hover:bg-danger-surface"
                   onClick={() => remove(d.id)}
                 >
                   Remove
@@ -1597,9 +1597,9 @@ function DoctorControlsStrip({
 }) {
   if (doctors.length === 0) return null;
   return (
-    <Card className="border-slate-200 shadow-sm">
+    <Card className="border-border shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm text-slate-700">Active doctors</CardTitle>
+        <CardTitle className="text-sm text-foreground">Active doctors</CardTitle>
         <CardDescription className="text-xs">
           Set per-doctor avg consult time and mark the doctor's arrival for today.
         </CardDescription>
@@ -1654,13 +1654,13 @@ function DoctorControlCard({
   };
 
   return (
-    <div className="border border-slate-200 rounded-lg p-3 flex flex-col gap-2 bg-white">
+    <div className="doctor-panel min-w-0 border border-border rounded-lg p-3 flex flex-col gap-2">
       <div>
-        <div className="font-medium text-slate-900 text-sm truncate">{doctor.name}</div>
-        <div className="text-xs text-slate-500 truncate">{doctor.specialty ?? "—"}</div>
+        <div className="font-medium text-foreground text-sm truncate">{doctor.name}</div>
+        <div className="text-xs text-muted-foreground truncate">{doctor.specialty ?? "—"}</div>
       </div>
       <div className="flex items-center gap-2">
-        <Label className="text-xs text-slate-600 whitespace-nowrap">Avg (min)</Label>
+        <Label className="text-xs text-muted-foreground whitespace-nowrap">Avg (min)</Label>
         <DurationSelect
           value={avg}
           allowClinicDefault
@@ -1678,7 +1678,7 @@ function DoctorControlCard({
           await onDoctorArrived(doctor.id);
           setArriving(false);
         }}
-        className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+        className="border-success bg-success text-success-foreground hover:bg-success/90"
       >
         <DoorOpen className="h-3.5 w-3.5 mr-1.5" />
         {arriving ? "Sending…" : "Doctor Arrived"}
@@ -1709,9 +1709,9 @@ function DailyShiftPanel({
   }
 
   return (
-    <Card className="border-slate-200 shadow-sm">
+    <Card className="border-border shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm text-slate-700 flex items-center gap-2">
+        <CardTitle className="text-sm text-foreground flex items-center gap-2">
           <Timer className="h-4 w-4" /> Daily shift status
         </CardTitle>
         <CardDescription className="text-xs">
@@ -1784,17 +1784,17 @@ function ShiftDoctorCard({
   };
 
   return (
-    <div className="border border-slate-200 rounded-lg p-3 flex flex-col gap-2 bg-white">
+    <div className="doctor-panel min-w-0 border border-border rounded-lg p-3 flex flex-col gap-2">
       <div>
-        <div className="font-medium text-slate-900 text-sm truncate">{doctor.name}</div>
-        <div className="text-xs text-slate-500 truncate">First today: {first ? formatDisplay(first) : "—"}</div>
+        <div className="font-medium text-foreground text-sm truncate">{doctor.name}</div>
+        <div className="text-xs text-muted-foreground truncate">First today: {first ? formatDisplay(first) : "—"}</div>
       </div>
       <div className="flex gap-2">
         <Button
           size="sm"
           variant="outline"
           disabled={!allowed || busy}
-          className="flex-1 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+          className="flex-1 border-success bg-success text-success-foreground hover:bg-success/90"
           onClick={runOnTime}
         >
           On Time
@@ -1805,7 +1805,7 @@ function ShiftDoctorCard({
               size="sm"
               variant="outline"
               disabled={!allowed || busy}
-              className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50"
+              className="flex-1 border-warning bg-warning-surface text-warning hover:bg-warning-surface/90"
             >
               Declare Delay
             </Button>
@@ -1829,14 +1829,14 @@ function ShiftDoctorCard({
               <Button variant="outline" onClick={() => setDelayOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={runDelay} disabled={busy} className="bg-amber-600 hover:bg-amber-700">
+              <Button onClick={runDelay} disabled={busy} className="bg-warning hover:bg-warning">
                 {busy ? "Applying…" : "Apply delay & notify"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
-      {!allowed && <div className="text-[11px] text-slate-500">{reason}</div>}
+      {!allowed && <div className="text-[11px] text-muted-foreground">{reason}</div>}
     </div>
   );
 }
@@ -1862,7 +1862,7 @@ function FeedbackTray({ onSubmit }: { onSubmit: (message: string) => Promise<voi
             <DialogTrigger asChild>
               <button
                 type="button"
-                className="fixed bottom-6 right-6 z-40 inline-flex items-center justify-center h-11 w-11 rounded-full bg-teal-600 hover:bg-teal-700 text-white shadow-lg ring-2 ring-white/60"
+                className="fixed bottom-6 right-6 z-40 inline-flex items-center justify-center h-11 w-11 rounded-full bg-primary hover:bg-primary text-primary-foreground shadow-lg ring-2 ring-card/60"
                 aria-label="Suggestions / Feedback"
               >
                 <MessageCircle className="h-5 w-5" />
@@ -1889,7 +1889,7 @@ function FeedbackTray({ onSubmit }: { onSubmit: (message: string) => Promise<voi
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={send} disabled={saving} className="bg-sky-600 hover:bg-sky-700">
+          <Button onClick={send} disabled={saving} className="bg-info hover:bg-info">
             {saving ? "Sending…" : "Send"}
           </Button>
         </DialogFooter>
