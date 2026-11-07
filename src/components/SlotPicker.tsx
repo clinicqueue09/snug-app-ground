@@ -52,7 +52,6 @@ export function SlotPicker({
   const [appointments, setAppointments] = useState<Record<string, AppointmentSlotRow[]>>({});
   const [selectedDate, setSelectedDate] = useState(value?.date ?? localDateKey(startOfToday()));
   const [loading, setLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [now, setNow] = useState(() => new Date());
 
   const days = useMemo(() => {
@@ -86,7 +85,8 @@ export function SlotPicker({
         .lte("off_date", lastDate),
       supabase
         .from("tokens")
-        .select("id,appointment_time,status")
+        .select("id,clinic_id,appointment_date,appointment_time,status")
+        .eq("clinic_id", clinicId)
         .eq("doctor_id", doctorId)
         .gte("appointment_date", firstDate)
         .lte("appointment_date", lastDate)
@@ -101,24 +101,12 @@ export function SlotPicker({
     setAvailability((availabilityResult.data ?? []) as AvailabilityRow[]);
     setDaysOff(new Set((timeOffResult.data ?? []).map((row) => row.off_date)));
     const grouped: Record<string, AppointmentSlotRow[]> = {};
-    const rowResults = await supabase
-      .from("tokens")
-      .select("id,appointment_date,appointment_time,status")
-      .eq("doctor_id", doctorId)
-      .gte("appointment_date", firstDate)
-      .lte("appointment_date", lastDate)
-      .neq("status", "cancelled");
-    if (rowResults.error) {
-      if (showErrors) toast.error(`Could not load bookings: ${rowResults.error.message}`);
-    } else {
-      for (const row of rowResults.data ?? []) {
-        const dateKey = row.appointment_date;
-        (grouped[dateKey] ??= []).push(row as AppointmentSlotRow);
-      }
-      setAppointments(grouped);
+    for (const row of tokensResult.data ?? []) {
+      const dateKey = row.appointment_date;
+      (grouped[dateKey] ??= []).push(row as AppointmentSlotRow);
     }
+    setAppointments(grouped);
     setNow(new Date());
-    setRefreshKey((current) => current + 1);
     setLoading(false);
   }, [clinicId, doctorId]);
 
@@ -148,7 +136,7 @@ export function SlotPicker({
       free,
       state: free.length === 0 ? "full" : free.length <= 3 ? "few" : "plenty",
     };
-  }), [days, daysOff, availability, now, slotLength, appointments, excludeTokenId, refreshKey]);
+  }), [days, daysOff, availability, now, slotLength, appointments, excludeTokenId]);
 
   const chosenDay = dayInfos.find((day) => day.key === selectedDate) ?? dayInfos[0];
   const firstFree = dayInfos.find((day) => day.free.length > 0);
