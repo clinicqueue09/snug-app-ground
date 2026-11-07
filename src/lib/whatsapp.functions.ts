@@ -265,50 +265,16 @@ export const sendDoctorArrivedForDoctor = createServerFn({ method: "POST" })
     if (error) return { ok: false as const, error: error.message };
     if (!rows || rows.length === 0) return { ok: true as const, sent: 0 };
 
-    const clinicId = (rows[0] as any).clinic_id as string;
-
-    if (!(await clinicIsConnected(supabase, clinicId))) {
-      return { ok: false as const, error: "WhatsApp not connected for this clinic" };
-    }
-
-    const [clinicRes, doctorRes] = await Promise.all([
-      supabase.from("clinics").select("name, address, map_link, clinic_mobile").eq("id", clinicId).maybeSingle(),
-      supabase.from("doctors").select("name, specialty").eq("id", data.doctorId).maybeSingle(),
-    ]);
-    const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", map_link: null, clinic_mobile: null }) as any;
-    const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
-
-    const ctx = await computeQueueContext(supabase, clinicId, data.doctorId, todayISO);
-
     let sent = 0;
-    for (const raw of rows) {
-      const t = raw as any;
-      if ((t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) continue;
-      const latest = ctx.displayToken.get(t.id) ?? t.token_number ?? null;
-      const msg = buildMessage({
-        variant: "doctor_arrived",
-        patientName: t.patient_name,
-        doctorName: doctor.name,
-        doctorSpecialty: doctor.specialty ?? null,
-        clinicName: clinic.name,
-        clinicAddress: clinic.address,
-        clinicMapLink: clinic.map_link ?? null,
-        clinicMobile: clinic.clinic_mobile,
-        date: t.appointment_date,
-        time: t.appointment_time,
-        runningTokenNumber: ctx.runningTokenNumber,
-        latestTokenNumber: latest,
+    for (const row of rows) {
+      const result = await dispatchNotification(supabase, {
+        tokenId: row.id,
+        messageType: "doctor_arrived",
       });
-      const res = await postToGateway(clinicId, t.phone_number, msg);
-      if (!res.ok) {
-        if (res.error?.includes("GATEWAY_API_KEY")) return { ok: false as const, error: res.error };
-        continue;
+      if (!result.ok && result.error.includes("GATEWAY_API_KEY")) {
+        return { ok: false as const, error: result.error };
       }
-      await (supabase.from("tokens") as any).update({
-        whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
-        doctor_arrived_sent_at: new Date().toISOString(),
-      }).eq("id", t.id);
-      sent += 1;
+      if (result.ok) sent += 1;
     }
     return { ok: true as const, sent };
   });
