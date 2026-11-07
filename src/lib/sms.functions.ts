@@ -1,5 +1,3 @@
-import { createServerFn } from "@tanstack/react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 /**
  * Fast2SMS Quick SMS ("q" route) sender.
@@ -38,10 +36,3 @@ export async function sendSmsRaw(phone10: string, message: string): Promise<{ ok
   }
 }
 
-export const sendSms = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: { phone: string; message: string }) => input)
-  .handler(async ({ data }) => {
-    const phone10 = (data.phone ?? "").replace(/\D/g, "").slice(-10);
-    return await sendSmsRaw(phone10, data.message);
-  });
