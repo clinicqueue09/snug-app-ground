@@ -1112,6 +1112,7 @@ function AddPatientCard({
   const [phone, setPhone] = useState("");
   const [doctorId, setDoctorId] = useState<string>("");
   const [slot, setSlot] = useState<{ date: string; time: string } | null>(null);
+  const [pickerRefreshSignal, setPickerRefreshSignal] = useState(0);
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [hour, setHour] = useState("");
   const [minute, setMinute] = useState("");
@@ -1157,6 +1158,7 @@ function AddPatientCard({
     if (error) {
       if ((error as any).code === "23505" || /duplicate|unique/i.test(error.message)) {
         setSlot(null);
+        setPickerRefreshSignal((current) => current + 1);
         return toast.error("This slot was just booked. Please pick another time.");
       }
       return toast.error(error.message);
@@ -1246,6 +1248,7 @@ function AddPatientCard({
               doctorDuration={doctors.find((doctor) => doctor.id === doctorId)?.avg_time_per_patient ?? null}
               value={slot}
               onChange={setSlot}
+              refreshSignal={pickerRefreshSignal}
             />
           ) : <>
           <div className="space-y-1.5">

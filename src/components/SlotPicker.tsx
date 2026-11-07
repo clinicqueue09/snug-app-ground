@@ -38,6 +38,7 @@ export function SlotPicker({
   value,
   onChange,
   excludeTokenId,
+  refreshSignal = 0,
 }: {
   clinicId: string;
   doctorId: string;
@@ -46,6 +47,7 @@ export function SlotPicker({
   value: SelectedSlot | null;
   onChange: (value: SelectedSlot | null) => void;
   excludeTokenId?: string;
+  refreshSignal?: number;
 }) {
   const [availability, setAvailability] = useState<AvailabilityRow[]>([]);
   const [daysOff, setDaysOff] = useState<Set<string>>(new Set());
@@ -124,7 +126,7 @@ export function SlotPicker({
     void loadSchedule(true);
     const interval = setInterval(() => void loadSchedule(false), 45_000);
     return () => clearInterval(interval);
-  }, [loadSchedule]);
+  }, [loadSchedule, refreshSignal]);
 
   useEffect(() => {
     if (value?.date) setSelectedDate(value.date);
@@ -219,7 +221,10 @@ export function SlotPicker({
               key={day.key}
               type="button"
               disabled={day.state === "leave" || day.state === "off" || day.state === "full"}
-              onClick={() => setSelectedDate(day.key)}
+              onClick={() => {
+                setSelectedDate(day.key);
+                if (value?.date !== day.key) onChange(null);
+              }}
               aria-pressed={isSelected}
               className={`flex h-[88px] w-[72px] shrink-0 flex-col items-center justify-center gap-1 rounded-md border text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-80 ${style} ${isSelected ? "ring-2 ring-primary ring-offset-1" : ""}`}
             >
