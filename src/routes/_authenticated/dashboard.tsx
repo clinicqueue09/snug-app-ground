@@ -1311,7 +1311,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
   const [address, setAddress] = useState(clinic?.address ?? "");
   const [mapLink, setMapLink] = useState(clinic?.map_link ?? "");
   const [mobile, setMobile] = useState(clinic?.clinic_mobile ?? "");
-  const [avg, setAvg] = useState(String(clinic?.avg_time_per_patient ?? 10));
+  const [avg, setAvg] = useState(clinic?.avg_time_per_patient ?? 10);
   const [saving, setSaving] = useState(false);
   const mapLinkValid = isValidGoogleMapsLink(mapLink.trim());
 
@@ -1321,7 +1321,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
       setAddress(clinic.address);
       setMapLink(clinic.map_link ?? "");
       setMobile(clinic.clinic_mobile ?? "");
-      setAvg(String(clinic.avg_time_per_patient));
+      setAvg(clinic.avg_time_per_patient);
     }
   }, [open, clinic]);
 
@@ -1331,8 +1331,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
     if (!mapLink.trim() || !isValidGoogleMapsLink(mapLink.trim()))
       return toast.error("Please paste a valid Google Maps location link.");
     if (mobile && !/^[0-9]{10}$/.test(mobile)) return toast.error("Mobile must be 10 digits.");
-    const avgN = parseInt(avg, 10);
-    if (!Number.isFinite(avgN) || avgN < 1 || avgN > 240) return toast.error("Avg time must be 1–240 minutes.");
+    const avgN = avg;
     const clinicNumberChanged = mobile.trim() !== (clinic.clinic_mobile ?? "");
     const mustRelinkWhatsApp = clinicNumberChanged && clinic.whatsapp_connected;
     setSaving(true);
@@ -1434,11 +1433,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Clinic default avg time / patient (min)</Label>
-              <Input
-                inputMode="numeric"
-                value={avg}
-                onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))}
-              />
+              <DurationSelect value={avg} onChange={(next) => { if (next !== null) setAvg(next); }} />
             </div>
           </div>
         </div>
