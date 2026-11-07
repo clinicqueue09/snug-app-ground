@@ -1462,35 +1462,26 @@ function ManageDoctorsDialog({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [specialty, setSpecialty] = useState("");
-  const [avg, setAvg] = useState("");
+  const [avg, setAvg] = useState<number | null>(null);
   const add = async () => {
     if (!clinicId) return toast.error("Clinic not loaded");
     if (!name.trim()) return toast.error("Name required");
     if (!specialty.trim()) return toast.error("Specialty required");
-    const avgParsed = avg.trim() === "" ? null : parseInt(avg, 10);
-    if (avgParsed !== null && (!Number.isFinite(avgParsed) || avgParsed < 1 || avgParsed > 240)) {
-      return toast.error("Avg time must be 1–240 minutes (or blank).");
-    }
     const { error } = await supabase.from("doctors").insert({
       clinic_id: clinicId,
       name: name.trim(),
       specialty: specialty.trim(),
-      avg_time_per_patient: avgParsed,
+      avg_time_per_patient: avg,
     });
     if (error) return toast.error(error.message);
     setName("");
     setSpecialty("");
-    setAvg("");
+    setAvg(null);
     onChange();
   };
 
-  const updateAvg = async (id: string, raw: string) => {
-    const trimmed = raw.trim();
-    const parsed = trimmed === "" ? null : parseInt(trimmed, 10);
-    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 1 || parsed > 240)) {
-      return toast.error("Avg time must be 1–240 minutes (or blank).");
-    }
-    const { error } = await supabase.from("doctors").update({ avg_time_per_patient: parsed }).eq("id", id);
+  const updateAvg = async (id: string, value: number | null) => {
+    const { error } = await supabase.from("doctors").update({ avg_time_per_patient: value }).eq("id", id);
     if (error) return toast.error(error.message);
     onChange();
   };
@@ -1508,23 +1499,18 @@ function ManageDoctorsDialog({
           Doctors
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Manage Doctors</DialogTitle>
           <DialogDescription className="text-xs">
-            Specialty is required. Avg time per patient is optional (blank uses clinic default).
+            Specialty is required. Set a doctor-specific duration or use the clinic default.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_180px]">
             <Input placeholder="Name *" value={name} onChange={(e) => setName(e.target.value)} />
             <Input placeholder="Specialty *" value={specialty} onChange={(e) => setSpecialty(e.target.value)} />
-            <Input
-              placeholder="Avg min (opt)"
-              inputMode="numeric"
-              value={avg}
-              onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))}
-            />
+            <DurationSelect value={avg} allowClinicDefault onChange={setAvg} ariaLabel="New doctor appointment duration" />
           </div>
           <Button onClick={add} size="sm" className="bg-sky-600 hover:bg-sky-700">
             Add doctor
@@ -1532,21 +1518,20 @@ function ManageDoctorsDialog({
           <div className="space-y-2 pt-2">
             {doctors.length === 0 && <div className="text-sm text-slate-500">No doctors yet.</div>}
             {doctors.map((d) => (
-              <div key={d.id} className="flex items-center gap-2 border border-slate-200 rounded-md px-3 py-2">
-                <div className="text-sm flex-1 min-w-0">
+              <div key={d.id} className="flex flex-wrap items-center gap-2 border border-slate-200 rounded-md px-3 py-2">
+                <div className="text-sm flex-1 min-w-[180px]">
                   <div className="font-medium text-slate-900 truncate">{d.name}</div>
                   {d.specialty && <div className="text-xs text-slate-500 truncate">{d.specialty}</div>}
                 </div>
                 <div className="flex items-center gap-1">
                   <Timer className="h-3.5 w-3.5 text-slate-400" />
-                  <Input
-                    defaultValue={d.avg_time_per_patient == null ? "" : String(d.avg_time_per_patient)}
-                    onBlur={(e) => updateAvg(d.id, e.target.value.replace(/\D/g, "").slice(0, 3))}
-                    inputMode="numeric"
-                    placeholder="—"
-                    className="w-16 h-8 text-sm"
+                  <DurationSelect
+                    value={d.avg_time_per_patient}
+                    allowClinicDefault
+                    onChange={(value) => updateAvg(d.id, value)}
+                    className="h-8 w-[150px] text-xs"
+                    ariaLabel={`${d.name} appointment duration`}
                   />
-                  <span className="text-xs text-slate-400">min</span>
                 </div>
                 <Button
                   size="sm"
@@ -1556,6 +1541,7 @@ function ManageDoctorsDialog({
                 >
                   Remove
                 </Button>
+                {clinicId && <DoctorWorkingHoursEditor doctorId={d.id} clinicId={clinicId} />}
               </div>
             ))}
           </div>
