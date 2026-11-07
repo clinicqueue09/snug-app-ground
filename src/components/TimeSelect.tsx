@@ -36,14 +36,14 @@ export function TimeSelect({
   onChange: (v: { hour: string; minute: string; meridiem: "AM" | "PM" }) => void;
   compact?: boolean;
 }) {
-  const triggerCls = compact ? "h-8 text-xs" : "";
+  const triggerCls = `w-auto min-w-[4.5rem] ${compact ? "h-8 text-xs" : ""}`;
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <Select value={hour} onValueChange={(v) => onChange({ hour: v, minute, meridiem })}>
         <SelectTrigger className={triggerCls} aria-label="Hour"><SelectValue placeholder="HH" /></SelectTrigger>
         <SelectContent>{HOURS.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
       </Select>
-      <span className="text-slate-400">:</span>
+      <span className="text-muted-foreground">:</span>
       <Select value={minute} onValueChange={(v) => onChange({ hour, minute: v, meridiem })}>
         <SelectTrigger className={triggerCls} aria-label="Minute"><SelectValue placeholder="MM" /></SelectTrigger>
         <SelectContent>{MINUTES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>

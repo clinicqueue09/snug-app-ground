@@ -200,9 +200,9 @@ export function SlotPicker({
   const noSavedSchedule = availability.length === 0 && !loading && !scheduleError;
 
   return (
-    <div className="space-y-3" aria-busy={loading}>
+    <div className="w-full min-w-0 max-w-full space-y-3" aria-busy={loading}>
       {noSavedSchedule && (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <p className="rounded-md bg-warning-surface px-3 py-2 text-xs text-warning">
           No working hours saved, default hours shown. Set them under Doctors.
         </p>
       )}
@@ -214,15 +214,15 @@ export function SlotPicker({
           Walk-in now
         </Button>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-2" aria-label="Choose appointment date">
+      <div className="flex w-full min-w-0 max-w-full gap-2 overflow-x-auto px-1 py-2" aria-label="Choose appointment date">
         {dayInfos.map((day) => {
           const isSelected = selectedDate === day.key;
           const style = day.state === "plenty"
-            ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+            ? "border-success bg-success-surface text-success"
             : day.state === "few"
-              ? "border-amber-300 bg-amber-50 text-amber-800"
+              ? "border-warning bg-warning-surface text-warning"
               : day.state === "full"
-                ? "border-rose-200 bg-rose-50 text-rose-700"
+                ? "border-danger bg-danger-surface text-danger"
                 : "border-muted bg-muted/60 text-muted-foreground";
           const note = day.state === "plenty" ? `${day.free.length} free`
             : day.state === "few" ? `${day.free.length} left`
@@ -255,7 +255,7 @@ export function SlotPicker({
           {groups.map((group) => group.slots.length > 0 && (
             <section key={group.label} className="space-y-2">
               <h4 className="text-xs font-semibold text-muted-foreground">{group.label}</h4>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="flex min-w-0 flex-wrap gap-1.5">
                 {group.slots.map((time) => {
                   const booked = isSlotBooked(time, appointments[chosenDay.key] ?? [], slotLength, excludeTokenId);
                   const selected = value?.date === chosenDay.key && value.time === time;
@@ -267,7 +267,7 @@ export function SlotPicker({
                       variant={selected ? "default" : "outline"}
                       disabled={booked || loading}
                       onClick={() => selectSlot(chosenDay.key, time)}
-                      className={`h-9 text-xs ${booked ? "text-muted-foreground line-through opacity-60" : ""} ${selected ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
+                      className={`h-8 w-[9ch] shrink-0 px-1 text-xs tabular-nums ${booked ? "text-muted-foreground line-through opacity-60" : ""} ${selected ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
                     >
                       {formatTime12(time)}
                     </Button>
