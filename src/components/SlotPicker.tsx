@@ -132,6 +132,11 @@ export function SlotPicker({
   }, [loadSchedule, refreshSignal]);
 
   useEffect(() => {
+    const clock = setInterval(() => setNow(new Date()), 15_000);
+    return () => clearInterval(clock);
+  }, []);
+
+  useEffect(() => {
     if (value?.date) setSelectedDate(value.date);
   }, [value?.date]);
 
