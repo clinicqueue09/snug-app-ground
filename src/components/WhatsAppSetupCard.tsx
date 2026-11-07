@@ -50,6 +50,14 @@ export function WhatsAppSetupCard({ clinicId, connected, onChange }: Props) {
     setBusy(false);
     if (!r) return;
     const body: any = r.body ?? {};
+    if (typeof body.error === "string" && body.error.trim()) {
+      stopPolling();
+      setQr(null);
+      setStatus("idle");
+      setProblem(body.error);
+      toast.error(body.error);
+      return;
+    }
     if (body.status === "already_connected") {
       setStatus("connected"); setQr(null); onChange();
       toast.success("WhatsApp already connected");
@@ -73,13 +81,12 @@ export function WhatsAppSetupCard({ clinicId, connected, onChange }: Props) {
         }
       }, 3000);
     } else {
-      const message = typeof body.error === "string" && body.error.trim() ? body.error : null;
       setStatus("idle");
       setQr(null);
       stopPolling();
-      if (message) setProblem(message);
       const fallback = r.error ?? `Gateway ${r.status}: ${String(body.raw ?? "").slice(0, 120)}`;
-      toast.error(message ?? fallback);
+      setProblem(fallback);
+      toast.error(fallback);
     }
   }
 
