@@ -29,6 +29,13 @@
       "when": 1794031112763,
       "tag": "0003_doctor_availability_and_time_off",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794031173242,
+      "tag": "0004_revoke_anon_doctor_schedule_access",
+      "breakpoints": true
     }
   ]
 }
