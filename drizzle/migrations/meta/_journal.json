@@ -43,6 +43,13 @@
       "when": 1794065131344,
       "tag": "0005_lock_app_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794067210493,
+      "tag": "0006_harden_clinic_and_receptionist_policies",
+      "breakpoints": true
     }
   ]
 }
