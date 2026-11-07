@@ -61,14 +61,14 @@ describe("appointment scheduling rules", () => {
 });
 import { slotForTime, maskPhone, escapeHtml } from "../src/lib/scheduling";
 describe("day schedule helpers", () => {
-  it("places a booking in the slot that contains it", () => {
+  test("places a booking in the slot that contains it", () => {
     expect(slotForTime("10:15", ["10:00", "10:10", "10:20"], 10)).toBe("10:10");
     expect(slotForTime("14:00", ["10:00", "10:10"], 10)).toBeNull();
   });
-  it("masks phones as 98••• ••321", () => {
+  test("masks phones as 98••• ••321", () => {
     expect(maskPhone("9812345321")).toBe("98••• ••321");
   });
-  it("escapes patient text for print", () => {
+  test("escapes patient text for print", () => {
     expect(escapeHtml(`<b>"A&B"</b>`)).toBe("&lt;b&gt;&quot;A&amp;B&quot;&lt;/b&gt;");
   });
 });
