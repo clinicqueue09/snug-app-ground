@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clampSlotLength, isSlotBooked, makeSlotTimes, sessionsForWeekday } from "@/lib/scheduling";
+import { clampSlotLength, isSlotBooked, makeSlotTimes, sessionsForWeekday } from "../src/lib/scheduling";
 
 describe("appointment scheduling rules", () => {
   test("uses doctor duration, clinic default, then ten minutes, clamped to five through sixty", () => {
