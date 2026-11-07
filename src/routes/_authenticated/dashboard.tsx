@@ -393,16 +393,16 @@ function Dashboard() {
 
         <section className="min-w-0 space-y-4">
           <Tabs defaultValue="today">
-            <TabsList>
-              <TabsTrigger value="today" className="gap-1.5">
+            <TabsList className="grid h-auto w-full grid-cols-3 sm:inline-flex sm:w-auto">
+              <TabsTrigger value="today" className="gap-1 px-1.5 text-xs sm:px-3 sm:text-sm">
                 <Clock className="h-3.5 w-3.5" />
                 Today's Queue
               </TabsTrigger>
-              <TabsTrigger value="upcoming" className="gap-1.5">
+              <TabsTrigger value="upcoming" className="gap-1 px-1.5 text-xs sm:px-3 sm:text-sm">
                 <CalendarClock className="h-3.5 w-3.5" />
                 Upcoming
               </TabsTrigger>
-              <TabsTrigger value="history" className="gap-1.5">
+              <TabsTrigger value="history" className="gap-1 px-1.5 text-xs sm:px-3 sm:text-sm">
                 <CalendarClock className="h-3.5 w-3.5" />
                 History (30d)
               </TabsTrigger>
