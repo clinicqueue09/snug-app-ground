@@ -136,9 +136,10 @@ export function SlotPicker({
   const dayInfos = useMemo<DayInfo[]>(() => days.map(({ date, key }) => {
     if (daysOff.has(key)) return { date, key, slots: [], free: [], state: "leave" };
     const sessions = sessionsForWeekday(date.getDay(), availability);
+    if (sessions.length === 0) return { date, key, slots: [], free: [], state: "off" };
     const todayMinute = date.toDateString() === now.toDateString() ? now.getHours() * 60 + now.getMinutes() : undefined;
     const slots = makeSlotTimes(sessions, slotLength, todayMinute);
-    if (slots.length === 0) return { date, key, slots, free: [], state: "off" };
+    if (slots.length === 0) return { date, key, slots, free: [], state: "full" };
     const bookedForDate = appointments[key] ?? [];
     const free = slots.filter((slot) => !isSlotBooked(slot, bookedForDate, slotLength, excludeTokenId));
     return {
