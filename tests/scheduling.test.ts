@@ -49,6 +49,8 @@ describe("appointment scheduling rules", () => {
       .toBe("Session 1 must end after it starts.");
     expect(validateAvailabilityDraft({ days: [1], session1, session2: { start_time: "12:00", end_time: "17:00" } }))
       .toBe("Session 2 must start after Session 1 ends.");
+    expect(validateAvailabilityDraft({ days: [1], session1, session2: { start_time: "13:00", end_time: "17:00" } }))
+      .toBe("Session 2 must start after Session 1 ends.");
     expect(validateAvailabilityDraft({ days: [1], session1, session2: { start_time: "17:00", end_time: "21:00" } }))
       .toBeNull();
   });

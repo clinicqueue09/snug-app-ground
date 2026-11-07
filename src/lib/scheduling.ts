@@ -71,7 +71,7 @@ export function validateAvailabilityDraft(draft: AvailabilityDraft): string | nu
   if (draft.session1.end_time <= draft.session1.start_time) return "Session 1 must end after it starts.";
   if (draft.session2) {
     if (draft.session2.end_time <= draft.session2.start_time) return "Session 2 must end after it starts.";
-    if (draft.session2.start_time < draft.session1.end_time) {
+    if (draft.session2.start_time <= draft.session1.end_time) {
       return "Session 2 must start after Session 1 ends.";
     }
   }
