@@ -53,6 +53,9 @@ import {
 import { cn, isValidGoogleMapsLink } from "@/lib/utils";
 import { format } from "date-fns";
 import { TimeSelect, to24h, parse24h, formatDisplay } from "@/components/TimeSelect";
+import { DurationSelect } from "@/components/DurationSelect";
+import { SlotPicker } from "@/components/SlotPicker";
+import { DoctorWorkingHoursEditor } from "@/components/DoctorWorkingHoursEditor";
 import { WhatsAppSetupCard } from "@/components/WhatsAppSetupCard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import logoUrl from "@/assets/logo.png";
@@ -368,6 +371,7 @@ function Dashboard() {
         <section className="lg:col-span-1">
           <AddPatientCard
             clinicId={clinic?.id}
+            clinicDuration={clinic?.avg_time_per_patient ?? 10}
             doctors={doctors}
             disabled={trialExpired}
             onAdded={async (createdToken) => {
@@ -971,6 +975,9 @@ function InlineTimeEdit({ token, onSaved }: { token: Token; onSaved: () => void 
 function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => void }) {
   const notify = useServerFn(notifyPatient);
   const [open, setOpen] = useState(false);
+  const [slot, setSlot] = useState<{ date: string; time: string } | null>(
+    token.appointment_time ? { date: token.appointment_date, time: token.appointment_time } : null,
+  );
   const [date, setDate] = useState<Date | undefined>(
     token.appointment_date ? new Date(token.appointment_date + "T00:00:00") : new Date(),
   );
@@ -980,14 +987,32 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
   const [meridiem, setMeridiem] = useState<"AM" | "PM">(initial.meridiem);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (!open) return;
+    const todayKey = format(new Date(), "yyyy-MM-dd");
+    const horizonDate = new Date();
+    horizonDate.setDate(horizonDate.getDate() + 30);
+    const withinPickerHorizon = token.appointment_date >= todayKey
+      && token.appointment_date <= format(horizonDate, "yyyy-MM-dd");
+    setSlot(token.appointment_time && withinPickerHorizon
+      ? { date: token.appointment_date, time: token.appointment_time }
+      : null);
+    setDate(token.appointment_date ? new Date(`${token.appointment_date}T00:00:00`) : new Date());
+    const current = parse24h(token.appointment_time);
+    setHour(current.hour);
+    setMinute(current.minute);
+    setMeridiem(current.meridiem);
+  }, [open, token.appointment_date, token.appointment_time]);
+
   const save = async () => {
-    if (!date) return toast.error("Pick a date");
+    if (token.doctor_id && !slot) return toast.error("Pick an available appointment slot.");
+    if (!token.doctor_id && !date) return toast.error("Pick a date");
     setSaving(true);
     const { error } = await supabase
       .from("tokens")
       .update({
-        appointment_date: format(date, "yyyy-MM-dd"),
-        appointment_time: to24h(hour, minute, meridiem),
+        appointment_date: token.doctor_id && slot ? slot.date : format(date ?? new Date(), "yyyy-MM-dd"),
+        appointment_time: token.doctor_id && slot ? slot.time : to24h(hour, minute, meridiem),
       })
       .eq("id", token.id);
     setSaving(false);
@@ -1025,6 +1050,16 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
           <DialogTitle>Reschedule appointment</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {token.doctor_id ? (
+            <SlotPicker
+              clinicId={token.clinic_id}
+              doctorId={token.doctor_id}
+              value={slot}
+              onChange={setSlot}
+              excludeTokenId={token.id}
+            />
+          ) : (
+          <>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-slate-700">Appointment Date</Label>
             <Popover>
@@ -1061,6 +1096,8 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
               }}
             />
           </div>
+          </>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
@@ -1077,11 +1114,13 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
 
 function AddPatientCard({
   clinicId,
+  clinicDuration,
   doctors,
   disabled,
   onAdded,
 }: {
   clinicId?: string;
+  clinicDuration: number;
   doctors: Doctor[];
   disabled: boolean;
   onAdded: (t: Token) => void;
@@ -1089,6 +1128,8 @@ function AddPatientCard({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [doctorId, setDoctorId] = useState<string>("");
+  const [slot, setSlot] = useState<{ date: string; time: string } | null>(null);
+  const [pickerRefreshSignal, setPickerRefreshSignal] = useState(0);
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [hour, setHour] = useState("");
   const [minute, setMinute] = useState("");
@@ -1105,13 +1146,13 @@ function AddPatientCard({
     if (!name.trim()) return toast.error("Patient name required");
     if (!phoneValid) return toast.error("Enter a valid 10-digit phone number");
     if (!doctorId) return toast.error("Doctor is required");
-    if (!date) return toast.error("Pick an appointment date");
-    if (!hour || !minute) return toast.error("Pick an appointment time");
+    if (doctorId && !slot) return toast.error("Pick an available appointment slot.");
+    if (!doctorId && !date) return toast.error("Pick an appointment date");
     // Block past date-times (validated in local clinic time)
-    const apptTime24 = to24h(hour, minute, meridiem);
+    const apptTime24 = doctorId && slot ? slot.time : to24h(hour, minute, meridiem);
     if (!apptTime24) return toast.error("Pick a valid appointment time");
     const [ah, am] = apptTime24.split(":").map((n) => parseInt(n, 10));
-    const apptDT = new Date(date);
+    const apptDT = doctorId && slot ? new Date(`${slot.date}T00:00:00`) : new Date(date ?? new Date());
     apptDT.setHours(ah, am, 0, 0);
     if (apptDT.getTime() < Date.now()) {
       return toast.error("Appointment must be in the future.");
@@ -1125,15 +1166,17 @@ function AddPatientCard({
         phone_number: phone,
         doctor_id: doctorId,
         token_number: 0,
-        appointment_date: format(date, "yyyy-MM-dd"),
-        appointment_time: to24h(hour, minute, meridiem),
+        appointment_date: doctorId && slot ? slot.date : format(date ?? new Date(), "yyyy-MM-dd"),
+        appointment_time: apptTime24,
       })
       .select("*")
       .single();
     setSaving(false);
     if (error) {
       if ((error as any).code === "23505" || /duplicate|unique/i.test(error.message)) {
-        return toast.error("This slot is already booked for this doctor. Pick another time.");
+        setSlot(null);
+        setPickerRefreshSignal((current) => current + 1);
+        return toast.error("This slot was just booked. Please pick another time.");
       }
       return toast.error(error.message);
     }
@@ -1141,6 +1184,7 @@ function AddPatientCard({
     setName("");
     setPhone("");
     setDoctorId("");
+    setSlot(null);
     setHour("");
     setMinute("");
     setMeridiem("AM");
@@ -1197,7 +1241,7 @@ function AddPatientCard({
             <Label className="text-xs font-medium text-slate-700">
               Doctor <span className="text-rose-500">*</span>
             </Label>
-            <Select value={doctorId} onValueChange={setDoctorId}>
+            <Select value={doctorId} onValueChange={(value) => { setDoctorId(value); setSlot(null); }}>
               <SelectTrigger className="border-slate-200">
                 <SelectValue placeholder="Select a doctor" />
               </SelectTrigger>
@@ -1212,6 +1256,18 @@ function AddPatientCard({
               </SelectContent>
             </Select>
           </div>
+          {doctorId && clinicId ? (
+            <SlotPicker
+              key={doctorId}
+              clinicId={clinicId}
+              doctorId={doctorId}
+              clinicDuration={clinicDuration}
+              doctorDuration={doctors.find((doctor) => doctor.id === doctorId)?.avg_time_per_patient ?? null}
+              value={slot}
+              onChange={setSlot}
+              refreshSignal={pickerRefreshSignal}
+            />
+          ) : <>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-slate-700">Date</Label>
             <Popover>
@@ -1256,6 +1312,7 @@ function AddPatientCard({
               }}
             />
           </div>
+          </>}
           <Button onClick={submit} disabled={saving || disabled} className="w-full bg-sky-600 hover:bg-sky-700">
             {saving ? "Adding..." : "Add to Queue"}
           </Button>
@@ -1274,7 +1331,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
   const [address, setAddress] = useState(clinic?.address ?? "");
   const [mapLink, setMapLink] = useState(clinic?.map_link ?? "");
   const [mobile, setMobile] = useState(clinic?.clinic_mobile ?? "");
-  const [avg, setAvg] = useState(String(clinic?.avg_time_per_patient ?? 10));
+  const [avg, setAvg] = useState(clinic?.avg_time_per_patient ?? 10);
   const [saving, setSaving] = useState(false);
   const mapLinkValid = isValidGoogleMapsLink(mapLink.trim());
 
@@ -1284,7 +1341,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
       setAddress(clinic.address);
       setMapLink(clinic.map_link ?? "");
       setMobile(clinic.clinic_mobile ?? "");
-      setAvg(String(clinic.avg_time_per_patient));
+      setAvg(clinic.avg_time_per_patient);
     }
   }, [open, clinic]);
 
@@ -1294,8 +1351,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
     if (!mapLink.trim() || !isValidGoogleMapsLink(mapLink.trim()))
       return toast.error("Please paste a valid Google Maps location link.");
     if (mobile && !/^[0-9]{10}$/.test(mobile)) return toast.error("Mobile must be 10 digits.");
-    const avgN = parseInt(avg, 10);
-    if (!Number.isFinite(avgN) || avgN < 1 || avgN > 240) return toast.error("Avg time must be 1–240 minutes.");
+    const avgN = avg;
     const clinicNumberChanged = mobile.trim() !== (clinic.clinic_mobile ?? "");
     const mustRelinkWhatsApp = clinicNumberChanged && clinic.whatsapp_connected;
     setSaving(true);
@@ -1397,11 +1453,7 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Clinic default avg time / patient (min)</Label>
-              <Input
-                inputMode="numeric"
-                value={avg}
-                onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))}
-              />
+              <DurationSelect value={avg} onChange={(next) => { if (next !== null) setAvg(next); }} />
             </div>
           </div>
         </div>
@@ -1430,35 +1482,26 @@ function ManageDoctorsDialog({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [specialty, setSpecialty] = useState("");
-  const [avg, setAvg] = useState("");
+  const [avg, setAvg] = useState<number | null>(null);
   const add = async () => {
     if (!clinicId) return toast.error("Clinic not loaded");
     if (!name.trim()) return toast.error("Name required");
     if (!specialty.trim()) return toast.error("Specialty required");
-    const avgParsed = avg.trim() === "" ? null : parseInt(avg, 10);
-    if (avgParsed !== null && (!Number.isFinite(avgParsed) || avgParsed < 1 || avgParsed > 240)) {
-      return toast.error("Avg time must be 1–240 minutes (or blank).");
-    }
     const { error } = await supabase.from("doctors").insert({
       clinic_id: clinicId,
       name: name.trim(),
       specialty: specialty.trim(),
-      avg_time_per_patient: avgParsed,
+      avg_time_per_patient: avg,
     });
     if (error) return toast.error(error.message);
     setName("");
     setSpecialty("");
-    setAvg("");
+    setAvg(null);
     onChange();
   };
 
-  const updateAvg = async (id: string, raw: string) => {
-    const trimmed = raw.trim();
-    const parsed = trimmed === "" ? null : parseInt(trimmed, 10);
-    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 1 || parsed > 240)) {
-      return toast.error("Avg time must be 1–240 minutes (or blank).");
-    }
-    const { error } = await supabase.from("doctors").update({ avg_time_per_patient: parsed }).eq("id", id);
+  const updateAvg = async (id: string, value: number | null) => {
+    const { error } = await supabase.from("doctors").update({ avg_time_per_patient: value }).eq("id", id);
     if (error) return toast.error(error.message);
     onChange();
   };
@@ -1476,23 +1519,18 @@ function ManageDoctorsDialog({
           Doctors
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Manage Doctors</DialogTitle>
           <DialogDescription className="text-xs">
-            Specialty is required. Avg time per patient is optional (blank uses clinic default).
+            Specialty is required. Set a doctor-specific duration or use the clinic default.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_180px]">
             <Input placeholder="Name *" value={name} onChange={(e) => setName(e.target.value)} />
             <Input placeholder="Specialty *" value={specialty} onChange={(e) => setSpecialty(e.target.value)} />
-            <Input
-              placeholder="Avg min (opt)"
-              inputMode="numeric"
-              value={avg}
-              onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))}
-            />
+            <DurationSelect value={avg} allowClinicDefault onChange={setAvg} ariaLabel="New doctor appointment duration" />
           </div>
           <Button onClick={add} size="sm" className="bg-sky-600 hover:bg-sky-700">
             Add doctor
@@ -1500,21 +1538,20 @@ function ManageDoctorsDialog({
           <div className="space-y-2 pt-2">
             {doctors.length === 0 && <div className="text-sm text-slate-500">No doctors yet.</div>}
             {doctors.map((d) => (
-              <div key={d.id} className="flex items-center gap-2 border border-slate-200 rounded-md px-3 py-2">
-                <div className="text-sm flex-1 min-w-0">
+              <div key={d.id} className="flex flex-wrap items-center gap-2 border border-slate-200 rounded-md px-3 py-2">
+                <div className="text-sm flex-1 min-w-[180px]">
                   <div className="font-medium text-slate-900 truncate">{d.name}</div>
                   {d.specialty && <div className="text-xs text-slate-500 truncate">{d.specialty}</div>}
                 </div>
                 <div className="flex items-center gap-1">
                   <Timer className="h-3.5 w-3.5 text-slate-400" />
-                  <Input
-                    defaultValue={d.avg_time_per_patient == null ? "" : String(d.avg_time_per_patient)}
-                    onBlur={(e) => updateAvg(d.id, e.target.value.replace(/\D/g, "").slice(0, 3))}
-                    inputMode="numeric"
-                    placeholder="—"
-                    className="w-16 h-8 text-sm"
+                  <DurationSelect
+                    value={d.avg_time_per_patient}
+                    allowClinicDefault
+                    onChange={(value) => updateAvg(d.id, value)}
+                    className="h-8 w-[150px] text-xs"
+                    ariaLabel={`${d.name} appointment duration`}
                   />
-                  <span className="text-xs text-slate-400">min</span>
                 </div>
                 <Button
                   size="sm"
@@ -1524,6 +1561,7 @@ function ManageDoctorsDialog({
                 >
                   Remove
                 </Button>
+                {clinicId && <DoctorWorkingHoursEditor doctorId={d.id} clinicId={clinicId} />}
               </div>
             ))}
           </div>
@@ -1586,26 +1624,23 @@ function DoctorControlCard({
   onDoctorArrived: (doctorId: string) => void | Promise<void>;
   onAvgChanged: () => void;
 }) {
-  const [avg, setAvg] = useState<string>(
-    doctor.avg_time_per_patient == null ? "" : String(doctor.avg_time_per_patient),
-  );
+  const [avg, setAvg] = useState<number | null>(doctor.avg_time_per_patient);
   const [saving, setSaving] = useState(false);
   const [arriving, setArriving] = useState(false);
   useEffect(() => {
-    setAvg(doctor.avg_time_per_patient == null ? "" : String(doctor.avg_time_per_patient));
+    setAvg(doctor.avg_time_per_patient);
   }, [doctor.avg_time_per_patient]);
 
-  const saveAvg = async () => {
-    const trimmed = avg.trim();
-    const parsed = trimmed === "" ? null : parseInt(trimmed, 10);
-    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 1 || parsed > 240)) {
-      return toast.error("Avg time must be 1–240 minutes (or blank).");
-    }
+  const saveAvg = async (parsed: number | null) => {
+    setAvg(parsed);
     if (parsed === doctor.avg_time_per_patient) return;
     setSaving(true);
     const { error } = await supabase.from("doctors").update({ avg_time_per_patient: parsed }).eq("id", doctor.id);
     setSaving(false);
-    if (error) return toast.error(error.message);
+    if (error) {
+      setAvg(doctor.avg_time_per_patient);
+      return toast.error(error.message);
+    }
     toast.success("Avg time updated");
     onAvgChanged();
   };
@@ -1618,17 +1653,12 @@ function DoctorControlCard({
       </div>
       <div className="flex items-center gap-2">
         <Label className="text-xs text-slate-600 whitespace-nowrap">Avg (min)</Label>
-        <Input
-          inputMode="numeric"
+        <DurationSelect
           value={avg}
-          onChange={(e) => setAvg(e.target.value.replace(/\D/g, "").slice(0, 3))}
-          onBlur={saveAvg}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
-          placeholder="—"
-          disabled={saving}
-          className="h-8 text-sm"
+          allowClinicDefault
+          onChange={saveAvg}
+          ariaLabel={`${doctor.name} average time per patient`}
+          className="h-8 w-36 text-xs"
         />
       </div>
       <Button
