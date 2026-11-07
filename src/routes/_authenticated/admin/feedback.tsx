@@ -4,6 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const Route = createFileRoute("/_authenticated/admin/feedback")({
+  head: () => ({ meta: [
+    {"title": "Clinic feedback · ClinicQ"},
+    {"name": "description", "content": "Review clinic feedback submitted to ClinicQ administrators."},
+    {"property": "og:title", "content": "Clinic feedback · ClinicQ"},
+    {"property": "og:description", "content": "Review clinic feedback submitted to ClinicQ administrators."},
+    {"property": "og:type", "content": "website"},
+    {"name": "twitter:card", "content": "summary_large_image"},
+  ] }),
   component: AdminFeedback,
 });
 

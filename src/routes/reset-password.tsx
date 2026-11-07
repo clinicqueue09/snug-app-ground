@@ -10,7 +10,14 @@ import { Stethoscope, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reset-password")({
-  head: () => ({ meta: [{ title: "Reset password · Clinic Queue" }] }),
+  head: () => ({ meta: [
+    {"title": "Reset password · ClinicQ"},
+    {"name": "description", "content": "Set a new password for your ClinicQ account."},
+    {"property": "og:title", "content": "Reset password · ClinicQ"},
+    {"property": "og:description", "content": "Set a new password for your ClinicQ account."},
+    {"property": "og:type", "content": "website"},
+    {"name": "twitter:card", "content": "summary_large_image"},
+  ] }),
   component: ResetPasswordPage,
 });
 
