@@ -5,3 +5,4 @@
 - [x] Add the 31-day slot picker with bookings, leave, default sessions, and quick selection.
 - [x] Use visual slots for doctor bookings and rescheduling; preserve legacy controls for unassigned doctors.
 - [x] Verify scheduling rule tests and the updated preview/build.
+- [x] Route new patients' first notification via SMS and recognized patients' later updates via connected WhatsApp, including doctor-arrival alerts; routing tests pass. Physical-phone delivery remains unverified.

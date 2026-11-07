@@ -61,6 +61,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import logoUrl from "@/assets/logo.png";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
+  head: () => ({ meta: [
+    {"title": "Appointments and queue · ClinicQ"},
+    {"name": "description", "content": "Manage clinic bookings, doctor schedules, and patient notifications."},
+    {"property": "og:title", "content": "Appointments and queue · ClinicQ"},
+    {"property": "og:description", "content": "Manage clinic bookings, doctor schedules, and patient notifications."},
+    {"property": "og:type", "content": "website"},
+    {"name": "twitter:card", "content": "summary_large_image"},
+  ] }),
   component: Dashboard,
 });
 

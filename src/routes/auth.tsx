@@ -11,12 +11,14 @@ import { Stethoscope, Eye, EyeOff } from "lucide-react";
 import { cn, isValidGoogleMapsLink } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
-  head: () => ({
-    meta: [
-      { title: "Sign in · Clinic Queue" },
-      { name: "description", content: "Sign in to the clinic queue management dashboard." },
-    ],
-  }),
+  head: () => ({ meta: [
+    {"title": "Sign in · ClinicQ"},
+    {"name": "description", "content": "Sign in or create your clinic account to manage appointments and patient queues."},
+    {"property": "og:title", "content": "Sign in · ClinicQ"},
+    {"property": "og:description", "content": "Sign in or create your clinic account to manage appointments and patient queues."},
+    {"property": "og:type", "content": "website"},
+    {"name": "twitter:card", "content": "summary_large_image"},
+  ] }),
   component: AuthPage,
 });
 

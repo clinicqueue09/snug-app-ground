@@ -9,7 +9,14 @@ import { toast } from "sonner";
 import { Stethoscope } from "lucide-react";
 
 export const Route = createFileRoute("/forgot-password")({
-  head: () => ({ meta: [{ title: "Forgot password · Clinic Queue" }] }),
+  head: () => ({ meta: [
+    {"title": "Forgot password · ClinicQ"},
+    {"name": "description", "content": "Request a password reset link for your ClinicQ account."},
+    {"property": "og:title", "content": "Forgot password · ClinicQ"},
+    {"property": "og:description", "content": "Request a password reset link for your ClinicQ account."},
+    {"property": "og:type", "content": "website"},
+    {"name": "twitter:card", "content": "summary_large_image"},
+  ] }),
   component: ForgotPasswordPage,
 });
 

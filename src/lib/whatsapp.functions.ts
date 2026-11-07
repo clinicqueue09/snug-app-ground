@@ -1,6 +1,7 @@
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { sendSmsRaw } from "@/lib/sms.functions";
+import { hasPreviousAppointment, notificationChannel } from "@/lib/notification-routing";
 
 // The WhatsApp gateway lives on a bare IP. Edge runtimes (the preview/worker
 // environment) refuse direct-IP fetches with Cloudflare's "error code: 1003"
@@ -264,50 +265,16 @@ export const sendDoctorArrivedForDoctor = createServerFn({ method: "POST" })
     if (error) return { ok: false as const, error: error.message };
     if (!rows || rows.length === 0) return { ok: true as const, sent: 0 };
 
-    const clinicId = (rows[0] as any).clinic_id as string;
-
-    if (!(await clinicIsConnected(supabase, clinicId))) {
-      return { ok: false as const, error: "WhatsApp not connected for this clinic" };
-    }
-
-    const [clinicRes, doctorRes] = await Promise.all([
-      supabase.from("clinics").select("name, address, map_link, clinic_mobile").eq("id", clinicId).maybeSingle(),
-      supabase.from("doctors").select("name, specialty").eq("id", data.doctorId).maybeSingle(),
-    ]);
-    const clinic = (clinicRes.data ?? { name: "our clinic", address: "—", map_link: null, clinic_mobile: null }) as any;
-    const doctor = (doctorRes.data ?? { name: "your doctor", specialty: null }) as any;
-
-    const ctx = await computeQueueContext(supabase, clinicId, data.doctorId, todayISO);
-
     let sent = 0;
-    for (const raw of rows) {
-      const t = raw as any;
-      if ((t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) continue;
-      const latest = ctx.displayToken.get(t.id) ?? t.token_number ?? null;
-      const msg = buildMessage({
-        variant: "doctor_arrived",
-        patientName: t.patient_name,
-        doctorName: doctor.name,
-        doctorSpecialty: doctor.specialty ?? null,
-        clinicName: clinic.name,
-        clinicAddress: clinic.address,
-        clinicMapLink: clinic.map_link ?? null,
-        clinicMobile: clinic.clinic_mobile,
-        date: t.appointment_date,
-        time: t.appointment_time,
-        runningTokenNumber: ctx.runningTokenNumber,
-        latestTokenNumber: latest,
+    for (const row of rows) {
+      const result = await dispatchNotification(supabase, {
+        tokenId: row.id,
+        messageType: "doctor_arrived",
       });
-      const res = await postToGateway(clinicId, t.phone_number, msg);
-      if (!res.ok) {
-        if (res.error?.includes("GATEWAY_API_KEY")) return { ok: false as const, error: res.error };
-        continue;
+      if (!result.ok && result.error.includes("GATEWAY_API_KEY")) {
+        return { ok: false as const, error: result.error };
       }
-      await (supabase.from("tokens") as any).update({
-        whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
-        doctor_arrived_sent_at: new Date().toISOString(),
-      }).eq("id", t.id);
-      sent += 1;
+      if (result.ok) sent += 1;
     }
     return { ok: true as const, sent };
   });
@@ -557,10 +524,10 @@ export const disconnectWhatsApp = createServerFn({ method: "POST" })
  *
  * Routes each touchpoint (confirmation, reported, queue_update,
  * next_in_line, doctor_arrived, reminder_24h) through a single entry:
- *   - If the patient's phone has opted in for this clinic AND the clinic
- *     WhatsApp gateway is connected → send via WhatsApp (postToGateway).
- *   - Otherwise → send via Fast2SMS. For the first ("confirmation") message
- *     we send the opt-in prompt with a wa.me link so the patient can opt in.
+ *   - New phone numbers receive their first notification via SMS.
+ *   - Prior clinic appointments, a successful notification on this appointment,
+ *     or explicit opt-in permit WhatsApp when the clinic is connected.
+ *   - A disconnected clinic uses SMS. Recognition never fabricates opt-in rows.
  */
 export type NotifyType =
   | "confirmation"
@@ -602,11 +569,24 @@ export async function dispatchNotification(
     return { ok: false, channel: null, error: "Invalid patient phone number" };
   }
 
-  const { data: optRow } = await (supabase.from("whatsapp_optins" as any) as any)
-    .select("id").eq("clinic_id", t.clinic_id).eq("phone_number", phone10).maybeSingle();
+  const [optRes, historyRes] = await Promise.all([
+    supabase.from("whatsapp_optins").select("id")
+      .eq("clinic_id", t.clinic_id).eq("phone_number", phone10).maybeSingle(),
+    supabase.from("tokens").select("phone_number")
+      .eq("clinic_id", t.clinic_id).neq("id", t.id),
+  ]);
+  if (optRes.error || historyRes.error || clinicRes.error) {
+    return { ok: false, channel: null, error: (optRes.error ?? historyRes.error ?? clinicRes.error).message };
+  }
+  const optRow = optRes.data;
   const optedIn = Boolean(optRow?.id);
 
-  const useWhatsApp = optedIn && Boolean(clinic.whatsapp_connected);
+  const useWhatsApp = notificationChannel({
+    connected: Boolean(clinic.whatsapp_connected),
+    optedIn,
+    previousAppointment: hasPreviousAppointment(phone10, historyRes.data ?? []),
+    messagesSent: t.whatsapp_messages_sent ?? 0,
+  }) === "whatsapp";
 
   const waVariantMap: Record<NotifyType, Variant> = {
     confirmation: "confirmation",
@@ -727,7 +707,10 @@ export async function dispatchNotification(
   if (input.messageType === "queue_update" || input.messageType === "reported") {
     patch.token_update_count = (t.token_update_count ?? 0) + 1;
   }
-  await (supabase.from("tokens") as any).update(patch).eq("id", t.id);
+  const { error: saveError } = await (supabase.from("tokens") as any).update(patch).eq("id", t.id);
+  if (saveError) {
+    return { ok: false, channel, status: sendResult.status, error: `Message accepted, but notification tracking could not be saved: ${saveError.message}` };
+  }
 
   return { ok: true, channel, status: sendResult.status, optedIn };
 }
