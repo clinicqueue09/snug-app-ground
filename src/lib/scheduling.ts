@@ -84,3 +84,27 @@ export function validateAvailabilityDraft(draft: AvailabilityDraft): string | nu
   }
   return null;
 }
+/** Returns the slot start (HH:MM) that contains the given appointment time, or null. */
+export function slotForTime(time: string | null, slots: string[], slotLength: number): string | null {
+  if (!time) return null;
+  const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  const value = toMin(time);
+  const length = clampSlotLength(slotLength, undefined);
+  return slots.find((slot) => value >= toMin(slot) && value < toMin(slot) + length) ?? null;
+}
+
+/** Masks a phone like 9876543321 -> "98••• ••321". */
+export function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "").slice(-10);
+  if (digits.length < 5) return digits;
+  return `${digits.slice(0, 2)}••• ••${digits.slice(-3)}`;
+}
+
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
