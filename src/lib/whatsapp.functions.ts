@@ -460,10 +460,26 @@ export const connectWhatsApp = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     try {
+      const { data: clinic, error: clinicError } = await supabase
+        .from("clinics")
+        .select("clinic_mobile")
+        .eq("id", data.clinicId)
+        .maybeSingle();
+      if (clinicError) {
+        return { ok: false as const, status: 500, body: { error: clinicError.message } };
+      }
+      const expectedNumber = String(clinic?.clinic_mobile ?? "").replace(/\D/g, "").slice(-10);
+      if (expectedNumber.length !== 10) {
+        return {
+          ok: false as const,
+          status: 400,
+          body: { error: "Add the clinic mobile number in Clinic Profile first, then link WhatsApp." },
+        };
+      }
       const res = await gatewayFetch("/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clinicId: data.clinicId }),
+        body: JSON.stringify({ clinicId: data.clinicId, expectedNumber }),
       });
       const text = await res.text();
       let body: any = {};
@@ -472,7 +488,9 @@ export const connectWhatsApp = createServerFn({ method: "POST" })
       if (!res.ok) {
         const snippet = text.slice(0, 300);
         console.error(`[connectWhatsApp] gateway responded ${res.status}: ${snippet}`);
-        if (body?.raw == null) body = { ...body, raw: snippet };
+        if (res.status !== 409 && typeof body?.error !== "string" && body?.raw == null) {
+          body = { ...body, raw: snippet };
+        }
       }
 
       if (body?.status === "already_connected") {
@@ -501,14 +519,37 @@ export const checkWhatsAppStatus = createServerFn({ method: "GET" })
       const text = await res.text();
       let body: any = {};
       try { body = text ? JSON.parse(text) : {}; } catch { body = { raw: text }; }
-      const connected = body?.isConnected === true;
+      const mismatch = typeof body?.error === "string" && body.error.trim() ? body.error : null;
+      const connected = !mismatch && body?.isConnected === true;
       if (connected) {
         await (supabase.from("clinics") as any).update({ whatsapp_connected: true }).eq("id", data.clinicId);
       }
-      return { ok: res.ok, status: res.status, connected, body };
+      return { ok: res.ok, status: res.status, connected, mismatch, body };
     } catch (e: any) {
-      return { ok: false as const, status: 0, connected: false, error: e?.message ?? "network error" };
+      return { ok: false as const, status: 0, connected: false, mismatch: null, error: e?.message ?? "network error" };
     }
+  });
+
+export const disconnectWhatsApp = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { clinicId: string }) => input)
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    try {
+      await gatewayFetch("/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clinicId: data.clinicId }),
+      });
+    } catch {
+      // The clinic's local connection flag must still be cleared if the gateway is unavailable.
+    }
+    const { error } = await supabase
+      .from("clinics")
+      .update({ whatsapp_connected: false })
+      .eq("id", data.clinicId);
+    if (error) return { ok: false as const, error: error.message };
+    return { ok: true as const };
   });
 
 /**

@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "react-qr-code";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { connectWhatsApp, checkWhatsAppStatus } from "@/lib/whatsapp.functions";
+import { connectWhatsApp, checkWhatsAppStatus, disconnectWhatsApp } from "@/lib/whatsapp.functions";
 import { CheckCircle2, QrCode, RefreshCw, Smartphone } from "lucide-react";
 
 type Props = { clinicId: string | undefined; connected: boolean; onChange: () => void };
@@ -14,9 +13,12 @@ type Props = { clinicId: string | undefined; connected: boolean; onChange: () =>
 export function WhatsAppSetupCard({ clinicId, connected, onChange }: Props) {
   const connect = useServerFn(connectWhatsApp);
   const checkStatus = useServerFn(checkWhatsAppStatus);
+  const disconnectFn = useServerFn(disconnectWhatsApp);
   const [qr, setQr] = useState<string | null>(null);
   const [status, setStatus] = useState<string>(connected ? "connected" : "idle");
   const [busy, setBusy] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => { setStatus(connected ? "connected" : "idle"); }, [connected]);
@@ -32,8 +34,19 @@ export function WhatsAppSetupCard({ clinicId, connected, onChange }: Props) {
 
   async function startLink() {
     if (!clinicId) return;
+    setProblem(null);
     setBusy(true); setQr(null); setStatus("requesting");
-    const r = await callConnect();
+    let r: Awaited<ReturnType<typeof callConnect>>;
+    try {
+      r = await callConnect();
+    } catch (error) {
+      setBusy(false);
+      setStatus("idle");
+      const message = error instanceof Error ? error.message : "Unable to start WhatsApp linking.";
+      setProblem(message);
+      toast.error(message);
+      return;
+    }
     setBusy(false);
     if (!r) return;
     const body: any = r.body ?? {};
@@ -49,6 +62,10 @@ export function WhatsAppSetupCard({ clinicId, connected, onChange }: Props) {
       pollRef.current = setInterval(async () => {
         if (!clinicId) return;
         const s = await checkStatus({ data: { clinicId } });
+        if (s?.mismatch) {
+          stopPolling(); setQr(null); setStatus("idle"); setProblem(s.mismatch);
+          return;
+        }
         if (s?.connected) {
           stopPolling(); setQr(null); setStatus("connected");
           onChange();
@@ -56,15 +73,31 @@ export function WhatsAppSetupCard({ clinicId, connected, onChange }: Props) {
         }
       }, 3000);
     } else {
-      setStatus("error");
-      toast.error(body.error ?? `Gateway ${r.status}: ${String(body.raw ?? "").slice(0, 120)}`);
+      const message = typeof body.error === "string" && body.error.trim() ? body.error : null;
+      setStatus("idle");
+      setQr(null);
+      stopPolling();
+      if (message) setProblem(message);
+      const fallback = r.error ?? `Gateway ${r.status}: ${String(body.raw ?? "").slice(0, 120)}`;
+      toast.error(message ?? fallback);
     }
   }
 
   async function disconnect() {
     if (!clinicId) return;
-    await supabase.from("clinics").update({ whatsapp_connected: false }).eq("id", clinicId);
-    setStatus("idle"); setQr(null); stopPolling(); onChange();
+    setDisconnecting(true);
+    try {
+      const result = await disconnectFn({ data: { clinicId } });
+      if (!result.ok) {
+        toast.error(result.error ?? "Unable to disconnect WhatsApp.");
+        return;
+      }
+      setProblem(null); setStatus("idle"); setQr(null); stopPolling(); onChange();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to disconnect WhatsApp.");
+    } finally {
+      setDisconnecting(false);
+    }
   }
 
   return (
@@ -89,13 +122,20 @@ export function WhatsAppSetupCard({ clinicId, connected, onChange }: Props) {
       <CardContent className="space-y-3">
         {status === "connected" ? (
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={disconnect}>Disconnect</Button>
+            <Button size="sm" variant="outline" onClick={disconnect} disabled={disconnecting}>
+              {disconnecting ? "Disconnecting…" : "Disconnect"}
+            </Button>
             <Button size="sm" variant="ghost" onClick={startLink} disabled={busy}>
               <RefreshCw className="h-3.5 w-3.5 mr-1" /> Re-link
             </Button>
           </div>
         ) : (
           <>
+            {problem && (
+              <div role="alert" className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {problem}
+              </div>
+            )}
             {!qr && (
               <Button size="sm" onClick={startLink} disabled={busy || !clinicId} className="gap-1.5">
                 <QrCode className="h-4 w-4" /> {busy ? "Requesting…" : "Link WhatsApp"}

@@ -1296,6 +1296,8 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
     if (mobile && !/^[0-9]{10}$/.test(mobile)) return toast.error("Mobile must be 10 digits.");
     const avgN = parseInt(avg, 10);
     if (!Number.isFinite(avgN) || avgN < 1 || avgN > 240) return toast.error("Avg time must be 1–240 minutes.");
+    const clinicNumberChanged = mobile.trim() !== (clinic.clinic_mobile ?? "");
+    const mustRelinkWhatsApp = clinicNumberChanged && clinic.whatsapp_connected;
     setSaving(true);
     const { error } = await supabase
       .from("clinics")
@@ -1305,11 +1307,16 @@ function ClinicProfileDialog({ clinic, onSaved }: { clinic: Clinic | null; onSav
         map_link: mapLink.trim() || null,
         clinic_mobile: mobile.trim() || null,
         avg_time_per_patient: avgN,
+        ...(mustRelinkWhatsApp ? { whatsapp_connected: false } : {}),
       })
       .eq("id", clinic.id);
     setSaving(false);
     if (error) return toast.error(error.message);
-    toast.success("Clinic profile updated");
+    if (mustRelinkWhatsApp) {
+      toast.success("Clinic number changed. Please link WhatsApp again with the new number.");
+    } else {
+      toast.success("Clinic profile updated");
+    }
     setOpen(false);
     onSaved();
   };
