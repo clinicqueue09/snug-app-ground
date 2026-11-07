@@ -68,8 +68,15 @@ export function isSlotBooked(
 
 export function validateAvailabilityDraft(draft: AvailabilityDraft): string | null {
   if (draft.days.length === 0) return "Select at least one working day.";
+  const validTime = (time: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
+  if (!validTime(draft.session1.start_time) || !validTime(draft.session1.end_time)) {
+    return "Enter valid start and end times for Session 1.";
+  }
   if (draft.session1.end_time <= draft.session1.start_time) return "Session 1 must end after it starts.";
   if (draft.session2) {
+    if (!validTime(draft.session2.start_time) || !validTime(draft.session2.end_time)) {
+      return "Enter valid start and end times for Session 2.";
+    }
     if (draft.session2.end_time <= draft.session2.start_time) return "Session 2 must end after it starts.";
     if (draft.session2.start_time <= draft.session1.end_time) {
       return "Session 2 must start after Session 1 ends.";
