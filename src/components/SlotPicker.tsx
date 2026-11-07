@@ -192,7 +192,7 @@ export function SlotPicker({
     { label: "Afternoon", slots: chosenDay?.slots.filter((time) => Number(time.slice(0, 2)) >= 12 && Number(time.slice(0, 2)) < 17) ?? [] },
     { label: "Evening", slots: chosenDay?.slots.filter((time) => Number(time.slice(0, 2)) >= 17) ?? [] },
   ];
-  const noSavedSchedule = availability.length === 0;
+  const noSavedSchedule = availability.length === 0 && !loading && !scheduleError;
 
   return (
     <div className="space-y-3" aria-busy={loading}>
