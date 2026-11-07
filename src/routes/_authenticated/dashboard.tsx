@@ -987,6 +987,16 @@ function RescheduleDialog({ token, onSaved }: { token: Token; onSaved: () => voi
   const [meridiem, setMeridiem] = useState<"AM" | "PM">(initial.meridiem);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (!open) return;
+    setSlot(token.appointment_time ? { date: token.appointment_date, time: token.appointment_time } : null);
+    setDate(token.appointment_date ? new Date(`${token.appointment_date}T00:00:00`) : new Date());
+    const current = parse24h(token.appointment_time);
+    setHour(current.hour);
+    setMinute(current.minute);
+    setMeridiem(current.meridiem);
+  }, [open, token.appointment_date, token.appointment_time]);
+
   const save = async () => {
     if (token.doctor_id && !slot) return toast.error("Pick an available appointment slot.");
     if (!token.doctor_id && !date) return toast.error("Pick a date");
