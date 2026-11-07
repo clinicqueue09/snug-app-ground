@@ -49,15 +49,13 @@ import {
   MessageCircle,
   Shield,
   Timer,
-  ChevronDown,
 } from "lucide-react";
 import { cn, isValidGoogleMapsLink } from "@/lib/utils";
 import { format } from "date-fns";
 import { TimeSelect, to24h, parse24h, formatDisplay } from "@/components/TimeSelect";
 import { DurationSelect } from "@/components/DurationSelect";
 import { SlotPicker } from "@/components/SlotPicker";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DoctorWorkingHoursEditor } from "@/components/DoctorWorkingHoursEditor";
 import { WhatsAppSetupCard } from "@/components/WhatsAppSetupCard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import logoUrl from "@/assets/logo.png";
@@ -373,6 +371,7 @@ function Dashboard() {
         <section className="lg:col-span-1">
           <AddPatientCard
             clinicId={clinic?.id}
+            clinicDuration={clinic?.avg_time_per_patient ?? 10}
             doctors={doctors}
             disabled={trialExpired}
             onAdded={async (createdToken) => {
