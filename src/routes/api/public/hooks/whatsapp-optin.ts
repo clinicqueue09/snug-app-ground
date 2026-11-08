@@ -42,6 +42,14 @@ export const Route = createFileRoute("/api/public/hooks/whatsapp-optin")({
         }
 
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: existing, error: exErr } = await supabaseAdmin
+          .from("whatsapp_optins" as any).select("id")
+          .eq("clinic_id", clinicId).eq("phone_number", phone10).maybeSingle();
+        if (exErr) {
+          return new Response(JSON.stringify({ ok: false, error: exErr.message }), {
+            status: 500, headers: { "Content-Type": "application/json" },
+          });
+        }
         const { error } = await supabaseAdmin
           .from("whatsapp_optins" as any)
           .upsert({ clinic_id: clinicId, phone_number: phone10 } as any, { onConflict: "clinic_id,phone_number" });
@@ -49,6 +57,26 @@ export const Route = createFileRoute("/api/public/hooks/whatsapp-optin")({
           return new Response(JSON.stringify({ ok: false, error: error.message }), {
             status: 500, headers: { "Content-Type": "application/json" },
           });
+        }
+        if (!existing) {
+          try {
+            const { todayISTString } = await import("@/lib/token-note");
+            const { dispatchNotification } = await import("@/lib/whatsapp.functions");
+            const { data: toks, error: tErr } = await supabaseAdmin
+              .from("tokens").select("id, phone_number, appointment_date, appointment_time")
+              .eq("clinic_id", clinicId).eq("status", "waiting")
+              .gte("appointment_date", todayISTString())
+              .order("appointment_date", { ascending: true })
+              .order("appointment_time", { ascending: true, nullsFirst: false });
+            if (tErr) throw tErr;
+            const next = (toks ?? []).find((r: any) => String(r.phone_number ?? "").replace(/\D/g, "").slice(-10) === phone10);
+            if (next) {
+              const r = await dispatchNotification(supabaseAdmin, { tokenId: (next as any).id, messageType: "confirmation" });
+              if (!r.ok) console.error("[whatsapp-optin] welcome send failed:", r.error);
+            }
+          } catch (e: any) {
+            console.error("[whatsapp-optin] welcome send error:", e?.message ?? e);
+          }
         }
         return new Response(JSON.stringify({ ok: true }), {
           status: 200, headers: { "Content-Type": "application/json" },
