@@ -3,6 +3,7 @@ import { validateDelta, nextCumulative, delayNotifyDecision, shiftTime } from ".
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { sendSmsRaw } from "@/lib/sms.functions";
+import { fitSms, joinParts, smsDate, smsTime } from "@/lib/sms-format";
 import { hasPreviousAppointment, notificationChannel } from "@/lib/notification-routing";
 
 // The WhatsApp gateway lives on a bare IP. Edge runtimes (the preview/worker
@@ -664,57 +665,39 @@ export async function dispatchNotification(
     sendResult = await postToGateway(t.clinic_id, phone10, message);
   } else {
     channel = "sms";
-    let smsText: string;
-    if (input.messageType === "confirmation") {
-      const waNumber = String(clinic.clinic_mobile ?? "").replace(/\D/g, "").slice(-10);
-      const waLink = waNumber ? `https://wa.me/91${waNumber}?text=Hi` : "";
-      const mapLink = String(clinic.map_link ?? "").trim();
-      smsText =
-        `Hello ${t.patient_name}, your appointment at ${clinic.name} with ${doc} is confirmed.\n` +
-        `Date: ${formatDateIN(t.appointment_date)}${timeStr ? ` | Time: ${timeStr}` : ""}\n` +
-        `${tokenNoteFor(t.appointment_date, latest, "sms")}\n` +
-        (mapLink ? `Location: ${mapLink}\n` : "") +
-        (waLink
-          ? `To receive further updates on appointment progress, click the link below and send "Hi" on WhatsApp:\n${waLink}\n`
-          : "") +
-        `\n${SIGNATURE}`;
-    } else {
-      const tokenLine = latest != null ? ` Token #${latest}.` : "";
-      const timing = input.tentativeTime ? ` Tentative time: ${input.tentativeTime}.` : "";
-      const base = `Hello ${t.patient_name},`;
+    const date = smsDate(t.appointment_date);
+    const time = smsTime(t.appointment_time);
+    const dt = [date, time].filter(Boolean).join(" ");
+    const waNumber = String(clinic.clinic_mobile ?? "").replace(/\D/g, "").slice(-10);
+    const waLink = waNumber ? `https://wa.me/91${waNumber}?text=Hi` : "";
+    const late = Boolean(input.delayMinutes && input.delayMinutes > 0);
+    const shiftTime = smsTime(input.tentativeTime ?? t.appointment_time);
+    const smsText = fitSms(({ first, doctor, clinic: cl }) => {
+      const who = doctor || "Doctor";
       switch (input.messageType) {
-        case "reported":
-          smsText = `${base} we've marked you as reported at ${clinic.name} with ${doc}.${tokenLine}${timing}\n${SIGNATURE}`;
-          break;
-        case "queue_update":
-          smsText = `${base} queue update at ${clinic.name} with ${doc}.${tokenLine}${timing}\n${SIGNATURE}`;
-          break;
-        case "next_in_line":
-          smsText = `${base} you're next in line for ${doc} at ${clinic.name}. Please be ready.${tokenLine}\n${SIGNATURE}`;
-          break;
-        case "doctor_arrived":
-          smsText = `${base} ${doc} has arrived at ${clinic.name}. Consultations are starting.${tokenLine}\n${SIGNATURE}`;
-          break;
+        case "confirmation":
+          return `${first}: appt ${joinParts(dt, doctor, cl)}.` + (waLink ? ` Updates: send Hi ${waLink}` : " -ClinicQ");
         case "reminder_24h":
-          smsText = `${base} reminder: your appointment at ${clinic.name} with ${doc} is tomorrow. Date: ${formatDateIN(t.appointment_date)}${timeStr ? ` | Time: ${timeStr}` : ""}.\n${String(clinic.map_link ?? "").trim() ? `Location: ${String(clinic.map_link).trim()}\n` : ""}${DISCLAIMER}\n${SIGNATURE}`;
-          break;
+          return `${first}: reminder, appt tomorrow ${joinParts(dt, doctor, cl)}. -ClinicQ`;
         case "rescheduled":
-          smsText = `${base} your appointment at ${clinic.name} with ${doc} has been rescheduled to ${formatDateIN(t.appointment_date)} | ${timeStr || "—"}. ${tokenNoteFor(t.appointment_date, latest, "sms")}\n${SIGNATURE}`;
-          break;
-        case "shift_update": {
-          const late = Boolean(input.delayMinutes && input.delayMinutes > 0);
-          const delayLine = late
-            ? ` Doctor is running about ${input.delayMinutes} minutes late at ${clinic.name}.`
-            : ` Doctor is back on schedule at ${clinic.name}.`;
-          const tt = input.tentativeTime ?? timeStr;
-          const timeLine = tt ? ` Your ${late ? "updated " : ""}tentative time: ${tt}.` : "";
-          smsText = `${base}${delayLine}${timeLine}${tokenLine}\n${DISCLAIMER}\n${SIGNATURE}`;
-          break;
+          return `${first}: appt moved to ${joinParts(dt, doctor, cl)}. -ClinicQ`;
+        case "shift_update":
+          return late
+            ? `${first}: ${who} running about ${input.delayMinutes} min late.${shiftTime ? ` New time ${shiftTime}.` : ""} -ClinicQ`
+            : `${first}: ${who} is back on schedule.${shiftTime ? ` Time ${shiftTime}.` : ""} -ClinicQ`;
+        case "doctor_arrived":
+          return `${first}: ${who} has arrived${cl ? ` at ${cl}` : ""}. -ClinicQ`;
+        case "next_in_line":
+          return `${first}: you are next${doctor ? ` with ${doctor}` : ""}. Please be ready. -ClinicQ`;
+        case "reported":
+        case "queue_update": {
+          const tt = smsTime(input.tentativeTime ?? t.appointment_time);
+          return `${first}: ${joinParts(latest != null ? `Token #${latest}` : "", tt ? `time ${tt}` : "", doctor)}. -ClinicQ`;
         }
         default:
-          smsText = `${base} update from ${clinic.name}.${tokenLine}\n${SIGNATURE}`;
+          return `${first}: update from ${cl}. -ClinicQ`;
       }
-    }
+    }, { patientName: t.patient_name, doctorName: doctor?.name === "your doctor" ? "" : doctor?.name, clinicName: clinic.name });
     sendResult = await sendSmsRaw(phone10, smsText);
   }
 
