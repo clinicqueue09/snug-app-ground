@@ -1898,3 +1898,32 @@ function FeedbackTray({ onSubmit }: { onSubmit: (message: string) => Promise<voi
     </Dialog>
   );
 }
+
+function PilotBanner() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    setShow(localStorage.getItem("clinicq_pilot_banner_dismissed") !== "1");
+  }, []);
+  if (!show) return null;
+  return (
+    <div className="bg-info-surface text-info border-b border-border">
+      <div className="max-w-7xl mx-auto px-6 py-2 flex items-start gap-3 text-sm">
+        <p className="flex-1">
+          <span className="font-semibold">Welcome to the ClinicQ Pilot.</span> You have early access with full
+          features. If anything looks unexpected, tap the Feedback button at the bottom right.
+        </p>
+        <button
+          type="button"
+          aria-label="Dismiss pilot banner"
+          className="shrink-0 rounded px-1 font-semibold hover:opacity-70"
+          onClick={() => {
+            localStorage.setItem("clinicq_pilot_banner_dismissed", "1");
+            setShow(false);
+          }}
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
