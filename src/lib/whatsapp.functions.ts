@@ -1,4 +1,4 @@
-import { tokenNoteFor, todayISTString } from "./token-note";
+import { tokenNoteFor, todayISTString, formatDateIN } from "./token-note";
 import { validateDelta, nextCumulative, delayNotifyDecision, shiftTime } from "./doctor-delay";
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
@@ -231,7 +231,7 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
       clinicAddress: clinic.address,
       clinicMapLink: clinic.map_link ?? null,
       clinicMobile: clinic.clinic_mobile,
-      date: t.appointment_date,
+      date: formatDateIN(t.appointment_date),
       time: t.appointment_time,
       runningTokenNumber: ctx.runningTokenNumber,
       latestTokenNumber: latest,
@@ -653,7 +653,7 @@ export async function dispatchNotification(
       clinicAddress: clinic.address,
       clinicMapLink: clinic.map_link ?? null,
       clinicMobile: clinic.clinic_mobile,
-      date: t.appointment_date,
+      date: formatDateIN(t.appointment_date),
       time: t.appointment_time,
       runningTokenNumber: ctx.runningTokenNumber,
       latestTokenNumber: latest,
@@ -671,7 +671,7 @@ export async function dispatchNotification(
       const mapLink = String(clinic.map_link ?? "").trim();
       smsText =
         `Hello ${t.patient_name}, your appointment at ${clinic.name} with ${doc} is confirmed.\n` +
-        `Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}\n` +
+        `Date: ${formatDateIN(t.appointment_date)}${timeStr ? ` | Time: ${timeStr}` : ""}\n` +
         `${tokenNoteFor(t.appointment_date, latest, "sms")}\n` +
         (mapLink ? `Location: ${mapLink}\n` : "") +
         (waLink
@@ -696,10 +696,10 @@ export async function dispatchNotification(
           smsText = `${base} ${doc} has arrived at ${clinic.name}. Consultations are starting.${tokenLine}\n${SIGNATURE}`;
           break;
         case "reminder_24h":
-          smsText = `${base} reminder: your appointment at ${clinic.name} with ${doc} is tomorrow. Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}.\n${String(clinic.map_link ?? "").trim() ? `Location: ${String(clinic.map_link).trim()}\n` : ""}${DISCLAIMER}\n${SIGNATURE}`;
+          smsText = `${base} reminder: your appointment at ${clinic.name} with ${doc} is tomorrow. Date: ${formatDateIN(t.appointment_date)}${timeStr ? ` | Time: ${timeStr}` : ""}.\n${String(clinic.map_link ?? "").trim() ? `Location: ${String(clinic.map_link).trim()}\n` : ""}${DISCLAIMER}\n${SIGNATURE}`;
           break;
         case "rescheduled":
-          smsText = `${base} your appointment at ${clinic.name} with ${doc} has been rescheduled to ${t.appointment_date} | ${timeStr || "—"}. ${tokenNoteFor(t.appointment_date, latest, "sms")}\n${SIGNATURE}`;
+          smsText = `${base} your appointment at ${clinic.name} with ${doc} has been rescheduled to ${formatDateIN(t.appointment_date)} | ${timeStr || "—"}. ${tokenNoteFor(t.appointment_date, latest, "sms")}\n${SIGNATURE}`;
           break;
         case "shift_update": {
           const late = Boolean(input.delayMinutes && input.delayMinutes > 0);
