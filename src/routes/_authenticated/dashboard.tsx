@@ -293,6 +293,7 @@ function Dashboard() {
         </div>
       )}
 
+      <PilotBanner />
       <header className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3 min-w-0">
@@ -307,6 +308,9 @@ function Dashboard() {
               <div className="flex items-baseline gap-2 flex-wrap">
                 <span className="font-semibold text-foreground leading-tight truncate">
                   {clinic?.name ?? "Clinic Queue"}
+                </span>
+                <span className="rounded-full bg-info-surface text-info px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                  Pilot
                 </span>
               </div>
               {clinic?.address && <div className="text-sm text-muted-foreground truncate">{clinic.address}</div>}
