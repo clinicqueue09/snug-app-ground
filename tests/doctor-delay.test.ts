@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { nowISTMinutes, tomorrowISTString, inReminderWindow, nextCumulative, delayNotifyDecision, shiftTime, validateDelta } from "../src/lib/doctor-delay";
 
 describe("doctor delay rules", () => {
