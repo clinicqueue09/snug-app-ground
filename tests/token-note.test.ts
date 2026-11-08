@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { todayISTString, tokenNoteFor } from "../src/lib/token-note";
+import { todayISTString, tokenNoteFor, formatDateIN } from "../src/lib/token-note";
 
 describe("todayISTString", () => {
   it("rolls to the next day in India after 18:30 UTC", () => {
@@ -20,8 +20,8 @@ describe("tokenNoteFor", () => {
   });
 });
 
-import { formatDateIN } from "../src/lib/token-note";
-test("Indian date format with weekday", () => {
+
+it("Indian date format with weekday", () => {
   expect(formatDateIN("2026-09-25")).toBe("FRI, 25th Sept 2026");
   expect(formatDateIN("2026-11-01")).toBe("SUN, 1st Nov 2026");
   expect(formatDateIN("2026-11-12")).toBe("THU, 12th Nov 2026");
