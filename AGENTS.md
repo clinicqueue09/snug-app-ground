@@ -13,3 +13,4 @@
 - Keep appointment slot calculations in `src/lib/scheduling.ts`, with the picker and doctor-hours editor as focused UI modules, so booking and rescheduling share the same schedule rules.
 - Keep clinic-scoped patient recognition and channel selection in `src/lib/notification-routing.ts`, used by the central dispatcher; appointment history and saved successful-send counts provide recognition without fabricating consent records.
 - Scope dashboard palette overrides through `.dashboard-theme` and doctor-panel tokens; keep appointment picker containers shrinkable with wrapping time buttons and an internally scrolling date strip to prevent page overflow.
+- Keep doctor-delay and evening-reminder rules (IST clock, delta limits, 10-minute notify threshold, daily notify cap, 9 PM window) as pure helpers in `src/lib/doctor-delay.ts` so server code and tests share them.
