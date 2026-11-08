@@ -50,6 +50,13 @@
       "when": 1794067210493,
       "tag": "0006_harden_clinic_and_receptionist_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794098555715,
+      "tag": "0007_doctor_shift_delay_tracking",
+      "breakpoints": true
     }
   ]
 }

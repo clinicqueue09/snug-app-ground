@@ -127,6 +127,8 @@ export type Database = {
           delay_minutes: number
           doctor_id: string
           id: string
+          notified_delay_minutes: number
+          notify_count: number
           shift_date: string
           status: string
         }
@@ -137,6 +139,8 @@ export type Database = {
           delay_minutes?: number
           doctor_id: string
           id?: string
+          notified_delay_minutes?: number
+          notify_count?: number
           shift_date: string
           status: string
         }
@@ -147,6 +151,8 @@ export type Database = {
           delay_minutes?: number
           doctor_id?: string
           id?: string
+          notified_delay_minutes?: number
+          notify_count?: number
           shift_date?: string
           status?: string
         }
