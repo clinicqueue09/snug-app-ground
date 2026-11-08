@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { todayISTString } from "@/lib/token-note";
 import { supabase } from "@/integrations/supabase/client";
 import {
   notifyPatient,
@@ -353,18 +354,17 @@ function Dashboard() {
           doctors={doctors}
           tokens={tokens.filter((t) => t.appointment_date === today && t.status === "waiting")}
           disabled={trialExpired}
-          onApply={async (doctorId, status, minutes) => {
-            const res = await applyShift({ data: { doctorId, status, delayMinutes: minutes } });
-            if (res.ok) {
-              toast.success(
-                status === "delayed"
-                  ? `Delay applied. ${res.shifted} slots shifted, ${res.sent} patients notified.`
-                  : `Doctor confirmed on time. ${res.sent} patients notified.`,
-              );
-              loadAll();
-            } else {
-              toast.error(res.error ?? "Shift update failed");
-            }
+          onApply={async (doctorId, delta) => {
+            const res = await applyShift({ data: { doctorId, deltaMinutes: delta } });
+            if (!res.ok) { toast.error(res.error ?? "Shift update failed"); return false; }
+            const head = res.cumulative > 0 ? `Delay now ${res.cumulative} min.` : "Doctor back on time.";
+            const moved = `${res.shifted} ${res.shifted === 1 ? "patient" : "patients"} moved`;
+            const msg = res.notified > 0 ? `, ${res.notified} notified.` : res.capReached ? ", nobody messaged." : ", nobody messaged yet (under 10 minutes).";
+            const extra = (res.skipped > 0 ? ` ${res.skipped} could not be moved.` : "") +
+              (res.capReached ? " Message limit reached, please call the remaining patients." : "");
+            (res.capReached || res.skipped > 0 ? toast.warning : toast.success)(`${head} ${moved}${res.shifted === 0 ? "." : msg}${extra}`);
+            loadAll();
+            return true;
           }}
         />
         <div className="grid grid-cols-1 gap-4">
@@ -1712,24 +1712,23 @@ function DoctorControlCard({
 
 function DailyShiftPanel({
   doctors,
-  tokens,
   disabled,
   onApply,
 }: {
   doctors: Doctor[];
   tokens: Token[];
   disabled: boolean;
-  onApply: (doctorId: string, status: "on_time" | "delayed", minutes?: number) => Promise<void>;
+  onApply: (doctorId: string, delta: number) => Promise<boolean>;
 }) {
+  const [delays, setDelays] = useState<Record<string, number>>({});
+  const loadDelays = useCallback(async () => {
+    const { data } = await supabase.from("doctor_shift_status").select("doctor_id, delay_minutes").eq("shift_date", todayISTString());
+    const m: Record<string, number> = {};
+    for (const r of (data ?? []) as { doctor_id: string; delay_minutes: number | null }[]) m[r.doctor_id] = r.delay_minutes ?? 0;
+    setDelays(m);
+  }, []);
+  useEffect(() => { void loadDelays(); }, [loadDelays]);
   if (doctors.length === 0) return null;
-  const now = new Date();
-
-  const byDoctor = new Map<string, Token[]>();
-  for (const t of tokens) {
-    if (!t.doctor_id) continue;
-    if (!byDoctor.has(t.doctor_id)) byDoctor.set(t.doctor_id, []);
-    byDoctor.get(t.doctor_id)!.push(t);
-  }
 
   return (
     <Card className="border-border shadow-sm">
@@ -1738,37 +1737,20 @@ function DailyShiftPanel({
           <Timer className="h-4 w-4" /> Daily shift status
         </CardTitle>
         <CardDescription className="text-xs">
-          Confirm on time or declare a delay — allowed up to 45 minutes before the doctor's first appointment.
+          Running late? Add a delay at any time. Patients are only messaged when the change reaches 10 minutes.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {doctors.map((d) => {
-            const list = (byDoctor.get(d.id) ?? [])
-              .filter((t) => t.appointment_time)
-              .sort((a, b) => (a.appointment_time ?? "").localeCompare(b.appointment_time ?? ""));
-            const first = list[0]?.appointment_time ?? null;
-            let allowed = false;
-            let reason = "No waiting patients today";
-            if (first && /^\d{1,2}:\d{2}$/.test(first)) {
-              const [fh, fm] = first.split(":").map((n) => parseInt(n, 10));
-              const dt = new Date();
-              dt.setHours(fh, fm, 0, 0);
-              const cutoff = new Date(dt.getTime() - 45 * 60_000);
-              allowed = now <= cutoff && !disabled;
-              reason = allowed ? "" : `Window closed (first appt ${first})`;
-            }
-            return (
-              <ShiftDoctorCard
-                key={d.id}
-                doctor={d}
-                allowed={allowed}
-                reason={reason}
-                first={first}
-                onApply={onApply}
-              />
-            );
-          })}
+          {doctors.map((d) => (
+            <ShiftDoctorCard
+              key={d.id}
+              doctor={d}
+              current={delays[d.id] ?? 0}
+              disabled={disabled}
+              onApply={async (delta) => { const ok = await onApply(d.id, delta); if (ok) await loadDelays(); return ok; }}
+            />
+          ))}
         </div>
       </CardContent>
     </Card>
@@ -1777,89 +1759,81 @@ function DailyShiftPanel({
 
 function ShiftDoctorCard({
   doctor,
-  allowed,
-  reason,
-  first,
+  current,
+  disabled,
   onApply,
 }: {
   doctor: Doctor;
-  allowed: boolean;
-  reason: string;
-  first: string | null;
-  onApply: (doctorId: string, status: "on_time" | "delayed", minutes?: number) => Promise<void>;
+  current: number;
+  disabled: boolean;
+  onApply: (delta: number) => Promise<boolean>;
 }) {
   const [busy, setBusy] = useState(false);
-  const [delayOpen, setDelayOpen] = useState(false);
-  const [minutes, setMinutes] = useState("15");
+  const [mode, setMode] = useState<"add" | "reduce" | null>(null);
+  const [minutes, setMinutes] = useState("10");
 
-  const runOnTime = async () => {
+  const run = async (delta: number) => {
     setBusy(true);
-    await onApply(doctor.id, "on_time");
+    const ok = await onApply(delta);
     setBusy(false);
+    if (ok) setMode(null);
   };
-  const runDelay = async () => {
+  const submit = () => {
     const m = parseInt(minutes, 10);
-    if (!Number.isFinite(m) || m < 1) return toast.error("Enter a positive delay in minutes");
-    setBusy(true);
-    await onApply(doctor.id, "delayed", m);
-    setBusy(false);
-    setDelayOpen(false);
+    if (!Number.isFinite(m) || m < 1) return toast.error("Enter minutes greater than 0");
+    if (mode === "reduce" && m > current) return toast.error(`Can't reduce by more than ${current} min`);
+    if (mode === "add" && current + m > 480) return toast.error("Delay can't be more than 480 minutes");
+    void run(mode === "reduce" ? -m : m);
   };
 
   return (
     <div className="doctor-panel min-w-0 border border-border rounded-lg p-3 flex flex-col gap-2">
-      <div>
-        <div className="font-medium text-foreground text-sm truncate">{doctor.name}</div>
-        <div className="text-xs text-muted-foreground truncate">First today: {first ? formatDisplay(first) : "—"}</div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium text-foreground text-sm truncate min-w-0">{doctor.name}</div>
+        {current > 0 ? (
+          <span className="rounded-full border border-warning bg-warning-surface px-2 py-0.5 text-[11px] font-medium text-warning">Running {current} min late</span>
+        ) : (
+          <span className="rounded-full border border-success bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success">On time</span>
+        )}
       </div>
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!allowed || busy}
-          className="flex-1 border-success bg-success text-success-foreground hover:bg-success/90"
-          onClick={runOnTime}
-        >
-          On Time
-        </Button>
-        <Dialog open={delayOpen} onOpenChange={setDelayOpen}>
-          <DialogTrigger asChild>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!allowed || busy}
-              className="flex-1 border-warning bg-warning-surface text-warning hover:bg-warning-surface/90"
-            >
-              Declare Delay
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Declare delay for {doctor.name}</DialogTitle>
-              <DialogDescription>
-                Shifts every today's waiting slot for this doctor forward and notifies patients.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label className="text-xs">Delay in minutes</Label>
-              <Input
-                inputMode="numeric"
-                value={minutes}
-                onChange={(e) => setMinutes(e.target.value.replace(/\D/g, "").slice(0, 3))}
-              />
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={disabled || busy}
+          className="border-warning bg-warning-surface text-warning hover:bg-warning-surface/90"
+          onClick={() => { setMinutes("10"); setMode("add"); }}>Add delay</Button>
+        {current > 0 && (
+          <>
+            <Button size="sm" variant="outline" disabled={disabled || busy} onClick={() => { setMinutes(String(Math.min(10, current))); setMode("reduce"); }}>Reduce delay</Button>
+            <Button size="sm" variant="outline" disabled={disabled || busy}
+              className="border-success bg-success text-success-foreground hover:bg-success/90"
+              onClick={() => void run(-current)}>Back on time</Button>
+          </>
+        )}
+      </div>
+      <Dialog open={mode !== null} onOpenChange={(o) => !o && setMode(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-sm max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{mode === "reduce" ? "Reduce delay" : "Add delay"} · {doctor.name}</DialogTitle>
+            <DialogDescription>
+              Current delay: {current} min. Moves today's waiting patients {mode === "reduce" ? "earlier" : "later"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {[10, 15, 30].filter((n) => mode !== "reduce" || n <= current).map((n) => (
+                <Button key={n} size="sm" variant={minutes === String(n) ? "default" : "outline"} onClick={() => setMinutes(String(n))}>
+                  {mode === "reduce" ? "−" : "+"}{n}
+                </Button>
+              ))}
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDelayOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={runDelay} disabled={busy} className="bg-warning hover:bg-warning">
-                {busy ? "Applying…" : "Apply delay & notify"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-      {!allowed && <div className="text-[11px] text-muted-foreground">{reason}</div>}
+            <Label className="text-xs">Minutes</Label>
+            <Input inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value.replace(/\D/g, "").slice(0, 3))} />
+          </div>
+          <DialogFooter className="flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setMode(null)}>Cancel</Button>
+            <Button onClick={submit} disabled={busy}>{busy ? "Applying…" : "Apply"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

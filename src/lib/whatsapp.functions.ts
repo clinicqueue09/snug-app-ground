@@ -1,4 +1,5 @@
-import { tokenNoteFor } from "./token-note";
+import { tokenNoteFor, todayISTString } from "./token-note";
+import { validateDelta, nextCumulative, delayNotifyDecision, shiftTime } from "./doctor-delay";
 import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { sendSmsRaw } from "@/lib/sms.functions";
@@ -106,7 +107,7 @@ export function buildMessage(params: {
     case "confirmation":
       return withSig(`${base} your appointment at ${params.clinicName} with ${doc} is confirmed.\n${dt}${note}\n${location}\n\n${DISCLAIMER}`);
     case "reminder_24h":
-      return withSig(`${base} reminder — your appointment at ${params.clinicName} with ${doc} is tomorrow.\n${dt}\n${location}\n\n${DISCLAIMER}`);
+      return withSig(`${base} reminder: your appointment at ${params.clinicName} with ${doc} is tomorrow. ${dt}.\n${location}\n\n${DISCLAIMER}`);
     case "doctor_arrived":
       return withSig(`${base} ${doc} has arrived at ${params.clinicName} and consultations are starting.\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     case "next_in_line":
@@ -118,10 +119,11 @@ export function buildMessage(params: {
       return withSig(`${base} ${timing}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     }
     case "shift_update": {
-      const delay = params.delayMinutes && params.delayMinutes > 0
-        ? `Doctor shift is delayed by ${params.delayMinutes} minutes.`
-        : `Doctor shift is on time.`;
-      const newTime = params.tentativeTime ? ` Your updated tentative time: ${params.tentativeTime}.` : "";
+      const late = Boolean(params.delayMinutes && params.delayMinutes > 0);
+      const delay = late
+        ? `Doctor is running about ${params.delayMinutes} minutes late.`
+        : `Doctor is back on schedule.`;
+      const newTime = params.tentativeTime ? ` Your ${late ? "updated " : ""}tentative time: ${params.tentativeTime}.` : "";
       return withSig(`${base} ${delay}${newTime}\n${dt}\n${tokens}\n${location}\n\n${DISCLAIMER}`);
     }
     case "rescheduled":
@@ -190,7 +192,7 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
       return { ok: false as const, error: "WhatsApp not connected for this clinic" };
     }
 
-    if ((t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) {
+    if (data.variant !== "shift_update" && (t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) {
       return { ok: false as const, error: `Message cap reached (${MAX_TOTAL_MESSAGES}/patient).` };
     }
     if (data.variant === "reminder_24h" && t.reminder_24h_sent_at) {
@@ -239,14 +241,13 @@ export const sendWhatsAppMessage = createServerFn({ method: "POST" })
     const result = await postToGateway(t.clinic_id, t.phone_number, message);
     if (!result.ok) return { ok: false as const, status: result.status, error: result.error ?? `Send failed (${result.status})` };
 
-    const patch: Record<string, unknown> = {
-      whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
-    };
+    const patch: Record<string, unknown> = {};
+    if (data.variant !== "shift_update") patch.whatsapp_messages_sent = (t.whatsapp_messages_sent ?? 0) + 1;
     if (data.variant === "reminder_24h") patch.reminder_24h_sent_at = new Date().toISOString();
     if (data.variant === "doctor_arrived") patch.doctor_arrived_sent_at = new Date().toISOString();
     if (data.variant === "token_update") patch.token_update_count = (t.token_update_count ?? 0) + 1;
 
-    await (supabase.from("tokens") as any).update(patch).eq("id", t.id);
+    if (Object.keys(patch).length) await (supabase.from("tokens") as any).update(patch).eq("id", t.id);
     return { ok: true as const, status: result.status };
   });
 
@@ -359,65 +360,78 @@ export const advanceQueueNotifications = createServerFn({ method: "POST" })
 
 export const applyDoctorShiftStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { doctorId: string; status: "on_time" | "delayed"; delayMinutes?: number }) => input)
+  .inputValidator((input: { doctorId: string; deltaMinutes: number }) => input)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const now = new Date();
-    const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const delayMinutes = data.status === "delayed" ? Math.max(1, Math.min(480, Math.floor(data.delayMinutes ?? 0))) : 0;
-    if (data.status === "delayed" && delayMinutes === 0) return { ok: false as const, error: "Delay minutes required" };
+    const delta = Number(data.deltaMinutes);
+    const bad = validateDelta(delta);
+    if (bad) return { ok: false as const, error: bad };
+    const todayISO = todayISTString();
+
+    const { data: doc } = await supabase.from("doctors").select("clinic_id").eq("id", data.doctorId).maybeSingle();
+    if (!doc) return { ok: false as const, error: "Doctor not found" };
+    const clinicId = (doc as any).clinic_id as string;
+
+    const { data: shiftRow } = await (supabase.from("doctor_shift_status") as any)
+      .select("delay_minutes, notified_delay_minutes, notify_count")
+      .eq("doctor_id", data.doctorId).eq("shift_date", todayISO).maybeSingle();
+    const cur = Number(shiftRow?.delay_minutes ?? 0);
+    const notifiedPrev = Number(shiftRow?.notified_delay_minutes ?? 0);
+    const notifyCount = Number(shiftRow?.notify_count ?? 0);
+    const cumulative = nextCumulative(cur, delta);
+    if (cumulative == null) return { ok: false as const, error: "Delay can't be less than 0 or more than 480 minutes" };
 
     const { data: rows } = await supabase
       .from("tokens")
-      .select("id, clinic_id, doctor_id, patient_name, phone_number, token_number, appointment_date, appointment_time, whatsapp_messages_sent, created_at")
+      .select("id, appointment_time")
       .eq("doctor_id", data.doctorId)
       .eq("appointment_date", todayISO)
       .eq("status", "waiting");
-    const tokens = (rows as any[]) ?? [];
-    if (tokens.length === 0) return { ok: false as const, error: "No waiting patients today for this doctor" };
+    const tokens = ((rows as any[]) ?? []).filter((t) => t.appointment_time && /^\d{1,2}:\d{2}/.test(t.appointment_time));
 
-    const sorted = tokens.slice().sort((a, b) => (a.appointment_time ?? "").localeCompare(b.appointment_time ?? ""));
-    const first = sorted[0].appointment_time as string | null;
-    if (!first || !/^\d{1,2}:\d{2}$/.test(first)) return { ok: false as const, error: "First appointment has no valid time" };
-    const [fh, fm] = first.split(":").map((n) => parseInt(n, 10));
-    const firstDT = new Date(); firstDT.setHours(fh, fm, 0, 0);
-    const cutoff = new Date(firstDT.getTime() - 45 * 60_000);
-    if (now > cutoff) return { ok: false as const, error: "Must submit at least 45 minutes before the first appointment" };
-
-    const clinicId = tokens[0].clinic_id as string;
-    await (supabase.from("doctor_shift_status") as any)
-      .upsert({
-        clinic_id: clinicId, doctor_id: data.doctorId, shift_date: todayISO,
-        status: data.status, delay_minutes: delayMinutes, created_by: userId,
-      }, { onConflict: "doctor_id,shift_date" });
-
-    if (delayMinutes > 0) {
-      for (const t of tokens) {
-        if (!t.appointment_time) continue;
-        const [h, m] = String(t.appointment_time).split(":").map((n) => parseInt(n, 10));
-        const dt = new Date(); dt.setHours(h, m + delayMinutes, 0, 0);
-        const newTime = `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
-        await supabase.from("tokens").update({ appointment_time: newTime }).eq("id", t.id);
-        t.appointment_time = newTime;
-      }
-    }
-
-    let sent = 0;
+    const planned: { id: string; old: string; next: string }[] = [];
     for (const t of tokens) {
-      if (!t.appointment_time) continue;
-      const res = await dispatchNotification(supabase, {
-        tokenId: t.id,
-        messageType: "shift_update",
-        tentativeTime: fmtTime12(t.appointment_time),
-        delayMinutes,
-      });
-      if (!res.ok && res.error.includes("GATEWAY_API_KEY")) {
-        return { ok: false as const, error: res.error };
+      const old = String(t.appointment_time).slice(0, 5);
+      const next = shiftTime(old, delta);
+      if (!next) return { ok: false as const, error: "Some appointments would move past midnight (before 00:00 or after 23:59). No changes made." };
+      planned.push({ id: t.id, old, next });
+    }
+    planned.sort((a, b) => delta > 0 ? b.old.localeCompare(a.old) : a.old.localeCompare(b.old));
+
+    const moved: { id: string; next: string }[] = [];
+    let skipped = 0;
+    for (const p of planned) {
+      const { error } = await supabase.from("tokens").update({ appointment_time: p.next }).eq("id", p.id);
+      if (error) {
+        if ((error as any).code === "23505" || /duplicate|unique/i.test(error.message)) { skipped += 1; continue; }
+        return { ok: false as const, error: error.message };
       }
-      if (res.ok) sent += 1;
+      moved.push(p);
     }
 
-    return { ok: true as const, sent, shifted: delayMinutes > 0 ? tokens.length : 0, gatewayConfigured: true };
+    const decision = delayNotifyDecision(cumulative, notifiedPrev, notifyCount);
+    let notified = 0;
+    if (decision.notify && moved.length > 0) {
+      for (const t of moved) {
+        const res = await dispatchNotification(supabase, {
+          tokenId: t.id, messageType: "shift_update",
+          tentativeTime: fmtTime12(t.next), delayMinutes: cumulative,
+        });
+        if (!res.ok && res.error.includes("GATEWAY_API_KEY")) return { ok: false as const, error: res.error };
+        if (res.ok) notified += 1;
+      }
+    }
+    const didNotify = decision.notify && moved.length > 0;
+
+    const { error: upErr } = await (supabase.from("doctor_shift_status") as any).upsert({
+      clinic_id: clinicId, doctor_id: data.doctorId, shift_date: todayISO,
+      status: cumulative > 0 ? "delayed" : "on_time", delay_minutes: cumulative, created_by: userId,
+      notified_delay_minutes: didNotify ? cumulative : notifiedPrev,
+      notify_count: didNotify ? notifyCount + 1 : notifyCount,
+    }, { onConflict: "doctor_id,shift_date" });
+    if (upErr) return { ok: false as const, error: upErr.message };
+
+    return { ok: true as const, cumulative, shifted: moved.length, notified, skipped, capReached: decision.capReached, sent: notified };
   });
 
 /**
@@ -554,7 +568,7 @@ export async function dispatchNotification(
   if (tokErr || !tokenRow) return { ok: false, channel: null, error: tokErr?.message ?? "Token not found" };
   const t = tokenRow as any;
 
-  if ((t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) {
+  if (input.messageType !== "shift_update" && (t.whatsapp_messages_sent ?? 0) >= MAX_TOTAL_MESSAGES) {
     return { ok: false, channel: null, error: `Message cap reached (${MAX_TOTAL_MESSAGES}/patient).` };
   }
 
@@ -682,17 +696,19 @@ export async function dispatchNotification(
           smsText = `${base} ${doc} has arrived at ${clinic.name}. Consultations are starting.${tokenLine}\n${SIGNATURE}`;
           break;
         case "reminder_24h":
-          smsText = `${base} reminder — your appointment at ${clinic.name} with ${doc} is tomorrow. Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}.\n${SIGNATURE}`;
+          smsText = `${base} reminder: your appointment at ${clinic.name} with ${doc} is tomorrow. Date: ${t.appointment_date}${timeStr ? ` | Time: ${timeStr}` : ""}.\n${String(clinic.map_link ?? "").trim() ? `Location: ${String(clinic.map_link).trim()}\n` : ""}${DISCLAIMER}\n${SIGNATURE}`;
           break;
         case "rescheduled":
           smsText = `${base} your appointment at ${clinic.name} with ${doc} has been rescheduled to ${t.appointment_date} | ${timeStr || "—"}. ${tokenNoteFor(t.appointment_date, latest, "sms")}\n${SIGNATURE}`;
           break;
         case "shift_update": {
-          const delayLine = input.delayMinutes && input.delayMinutes > 0
-            ? ` doctor shift is delayed by ${input.delayMinutes} minutes at ${clinic.name}.`
-            : ` doctor shift is on time at ${clinic.name}.`;
-          const timeLine = timeStr ? ` Your tentative time: ${timeStr}.` : "";
-          smsText = `${base}${delayLine}${timeLine}${tokenLine}\n${SIGNATURE}`;
+          const late = Boolean(input.delayMinutes && input.delayMinutes > 0);
+          const delayLine = late
+            ? ` Doctor is running about ${input.delayMinutes} minutes late at ${clinic.name}.`
+            : ` Doctor is back on schedule at ${clinic.name}.`;
+          const tt = input.tentativeTime ?? timeStr;
+          const timeLine = tt ? ` Your ${late ? "updated " : ""}tentative time: ${tt}.` : "";
+          smsText = `${base}${delayLine}${timeLine}${tokenLine}\n${DISCLAIMER}\n${SIGNATURE}`;
           break;
         }
         default:
@@ -706,15 +722,16 @@ export async function dispatchNotification(
     return { ok: false, channel, status: sendResult.status, error: sendResult.error ?? `Send failed (${sendResult.status})` };
   }
 
-  const patch: Record<string, unknown> = {
-    whatsapp_messages_sent: (t.whatsapp_messages_sent ?? 0) + 1,
-  };
+  const patch: Record<string, unknown> = {};
+  if (input.messageType !== "shift_update") patch.whatsapp_messages_sent = (t.whatsapp_messages_sent ?? 0) + 1;
   if (input.messageType === "doctor_arrived") patch.doctor_arrived_sent_at = new Date().toISOString();
   if (input.messageType === "reminder_24h") patch.reminder_24h_sent_at = new Date().toISOString();
   if (input.messageType === "queue_update" || input.messageType === "reported") {
     patch.token_update_count = (t.token_update_count ?? 0) + 1;
   }
-  const { error: saveError } = await (supabase.from("tokens") as any).update(patch).eq("id", t.id);
+  const { error: saveError } = Object.keys(patch).length
+    ? await (supabase.from("tokens") as any).update(patch).eq("id", t.id)
+    : { error: null };
   if (saveError) {
     return { ok: false, channel, status: sendResult.status, error: `Message accepted, but notification tracking could not be saved: ${saveError.message}` };
   }

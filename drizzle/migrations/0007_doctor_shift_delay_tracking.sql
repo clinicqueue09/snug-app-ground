@@ -1,0 +1,1 @@
+ALTER TABLE public.doctor_shift_status ADD COLUMN IF NOT EXISTS notified_delay_minutes integer NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS notify_count integer NOT NULL DEFAULT 0;
