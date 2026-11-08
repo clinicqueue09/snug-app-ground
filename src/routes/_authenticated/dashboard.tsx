@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { todayISTString } from "@/lib/token-note";
 import { supabase } from "@/integrations/supabase/client";
 import {
   notifyPatient,

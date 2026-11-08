@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { formatDisplay } from "@/components/TimeSelect";
 import { cn } from "@/lib/utils";
+import { todayISTString } from "@/lib/token-note";
 import {
   clampSlotLength,
   escapeHtml,
@@ -80,6 +81,7 @@ export function DoctorDaySchedule<T extends ScheduleToken>({
   const [day, setDay] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   const [availability, setAvailability] = useState<AvailabilityRow[]>([]);
   const [onLeave, setOnLeave] = useState(false);
+  const [lateBy, setLateBy] = useState(0);
   const [loading, setLoading] = useState(false);
   const [bookTime, setBookTime] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -109,7 +111,11 @@ export function DoctorDaySchedule<T extends ScheduleToken>({
     if (a.error || off.error) return toast.error((a.error ?? off.error)!.message);
     setAvailability((a.data ?? []) as AvailabilityRow[]);
     setOnLeave(Boolean(off.data));
-  }, [doctorId, clinicId, key]);
+    if (key === todayISTString()) {
+      const { data: sh } = await supabase.from("doctor_shift_status").select("delay_minutes").eq("doctor_id", doctorId).eq("shift_date", key).maybeSingle();
+      setLateBy(sh?.delay_minutes ?? 0);
+    } else setLateBy(0);
+  }, [doctorId, clinicId, key, tokens]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -208,6 +214,7 @@ export function DoctorDaySchedule<T extends ScheduleToken>({
         <Button size="sm" variant="outline" onClick={() => { const d = new Date(); d.setHours(0, 0, 0, 0); setDay(d); }}>Today</Button>
         {onLeave && <span className="rounded-full bg-danger-surface px-2 py-0.5 text-xs font-medium text-danger">On leave</span>}
       </div>
+      {lateBy > 0 && <p className="text-xs font-medium text-warning">Running about {lateBy} min late</p>}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {[["Seen", seen], ["In the room", inRoom], ["Booked waiting", waiting], ["Free slots", free]].map(([label, n]) => (
