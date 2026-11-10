@@ -23,6 +23,9 @@ export default defineConfig({
     resolve: {
       alias: {
         // Pin entities to the hoisted v4.5.0 copy; nested v7 copies break React Email SSR.
+        // htmlparser2 imports "entities/decode" and "entities/encode" (no ./lib/ prefix).
+        "entities/decode": path.resolve(__dirname, "node_modules/entities/lib/decode.js"),
+        "entities/encode": path.resolve(__dirname, "node_modules/entities/lib/encode.js"),
         "entities/lib/decode.js": path.resolve(__dirname, "node_modules/entities/lib/decode.js"),
         "entities/lib/encode.js": path.resolve(__dirname, "node_modules/entities/lib/encode.js"),
         entities: path.resolve(__dirname, "node_modules/entities"),
