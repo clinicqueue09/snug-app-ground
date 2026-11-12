@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo-wide.png";
 import {
   Smartphone, MessageCircle, PhoneOff, Users, CalendarClock, Star, Clock, CheckCircle2,
 } from "lucide-react";
@@ -54,8 +54,7 @@ function Landing() {
     <div className="dashboard-theme min-h-screen bg-background text-foreground">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
         <div className="flex items-center gap-2">
-          <img src={logo} alt="ClinicQ logo" className="h-14 w-14 rounded-xl object-contain" />
-          <span className="text-2xl font-bold">ClinicQ</span>
+          <img src={logo} alt="ClinicQ - Queues reduced. Care enhanced." className="h-20 w-auto rounded-xl bg-card p-1 object-contain sm:h-24 md:h-28" />
         </div>
         <Button asChild variant="outline" size="sm"><Link to="/auth">Sign in</Link></Button>
       </header>
