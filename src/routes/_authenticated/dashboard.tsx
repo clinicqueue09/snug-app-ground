@@ -300,9 +300,9 @@ function Dashboard() {
             <img
               src={logoUrl}
               alt="ClinicQ logo"
-              width={40}
-              height={40}
-              className="h-10 w-10 rounded-xl shadow-sm shrink-0 bg-card object-contain"
+              width={56}
+              height={56}
+              className="h-14 w-14 rounded-xl shadow-sm shrink-0 bg-card object-contain"
             />
             <div className="min-w-0">
               <div className="flex items-baseline gap-2 flex-wrap">

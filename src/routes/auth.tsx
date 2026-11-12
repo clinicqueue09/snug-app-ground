@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Stethoscope, Eye, EyeOff } from "lucide-react";
+import logo from "@/assets/logo.png";
+import { Eye, EyeOff } from "lucide-react";
 import { cn, isValidGoogleMapsLink } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
@@ -99,9 +100,7 @@ function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4 py-10">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="h-12 w-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-            <Stethoscope className="h-6 w-6" />
-          </div>
+          <img src={logo} alt="ClinicQ logo" width={80} height={80} className="h-20 w-20 rounded-2xl object-contain shadow-sm" />
           <h1 className="text-2xl font-semibold tracking-tight">ClinicQ</h1>
           <p className="text-sm text-muted-foreground">Doctor's/Receptionist's workspace</p>
         </div>
