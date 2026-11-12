@@ -54,8 +54,8 @@ function Landing() {
     <div className="dashboard-theme min-h-screen bg-background text-foreground">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
         <div className="flex items-center gap-2">
-          <img src={logo} alt="ClinicQ logo" className="h-9 w-9 rounded-lg" />
-          <span className="text-lg font-bold">ClinicQ</span>
+          <img src={logo} alt="ClinicQ logo" className="h-14 w-14 rounded-xl object-contain" />
+          <span className="text-2xl font-bold">ClinicQ</span>
         </div>
         <Button asChild variant="outline" size="sm"><Link to="/auth">Sign in</Link></Button>
       </header>
